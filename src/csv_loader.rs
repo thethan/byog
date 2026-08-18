@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::card::{Card, CardType};
 use crate::engine::EngineError;
+use crate::token_pool::TokenPool;
 
 const DEFAULT_CARDS_CSV_PATH: &str = "data/cards.csv";
 
@@ -60,6 +61,7 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
             toughness: optional_value(&record, headers.get("toughness").copied()),
             is_commander: optional_bool(&record, headers.get("is_commander").copied()),
             is_partner: optional_bool(&record, headers.get("is_partner").copied()),
+            token_pools: optional_token_pools(&record, headers.get("token_pools").copied(), line_idx + 2)?,
         });
     }
 
@@ -98,6 +100,22 @@ fn optional_bool(record: &csv::StringRecord, idx: Option<usize>) -> bool {
     )
 }
 
+fn optional_token_pools(
+    record: &csv::StringRecord,
+    idx: Option<usize>,
+    line: usize,
+) -> Result<Vec<TokenPool>, EngineError> {
+    let Some(value) = optional_value(record, idx) else {
+        return Ok(Vec::new());
+    };
+
+    TokenPool::parse_list(&value).map_err(|message| {
+        EngineError::Validation(format!(
+            "Invalid token_pools value at CSV line {line}: {message}"
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -112,7 +130,7 @@ mod tests {
             .expect("time")
             .as_nanos();
         let path = std::env::temp_dir().join(format!("cards_test_{unique}.csv"));
-        let csv = "id,name,card_type,is_commander\n1,Sol Ring,Artifact,true\n2,Island,Land,\n";
+        let csv = "id,name,card_type,is_commander,token_pools\n1,Sol Ring,Artifact,true,\"id=charge|token=fa-bolt|background=amber|starting=1|max=3|active=true\"\n2,Island,Land,,\n";
         fs::write(&path, csv).expect("write temp csv");
 
         let cards = load_cards(Some(&path)).expect("load cards");
@@ -123,7 +141,9 @@ mod tests {
         assert_eq!(cards[0].name, "Sol Ring");
         assert!(cards[0].is_commander);
         assert!(!cards[0].is_partner);
+        assert_eq!(cards[0].token_pools[0].token(), "fa-bolt");
         assert_eq!(cards[1].mana_cost, None);
         assert_eq!(cards[1].oracle_text, None);
+        assert!(cards[1].token_pools.is_empty());
     }
 }
