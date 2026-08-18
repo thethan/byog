@@ -24,6 +24,30 @@ impl TokenPool {
         }
     }
 
+    pub fn configured(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        token: impl Into<String>,
+        background: Option<String>,
+        count: u32,
+        min: Option<u32>,
+        max: Option<u32>,
+        active: bool,
+    ) -> Result<Self, String> {
+        let pool = Self {
+            id: id.into(),
+            label: label.into(),
+            token: token.into(),
+            background,
+            count,
+            min,
+            max,
+            active,
+        };
+        pool.validate()?;
+        Ok(pool)
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.id.trim().is_empty() {
             return Err("Token pool id cannot be empty".to_string());
@@ -90,6 +114,23 @@ impl TokenPool {
         Ok(())
     }
 
+    pub fn remove_tokens(&mut self, amount: u32) -> Result<(), String> {
+        let next = self
+            .count
+            .checked_sub(amount)
+            .ok_or_else(|| format!("Token pool '{}' cannot go below zero", self.id))?;
+        if let Some(min) = self.min {
+            if next < min {
+                return Err(format!(
+                    "Token pool '{}' cannot go below min of {min}",
+                    self.id
+                ));
+            }
+        }
+        self.count = next;
+        Ok(())
+    }
+
     pub fn parse_list(raw: &str) -> Result<Vec<Self>, String> {
         raw.split(';')
             .map(str::trim)
@@ -108,7 +149,11 @@ impl TokenPool {
         let mut max = None;
         let mut active = false;
 
-        for part in raw.split('|').map(str::trim).filter(|value| !value.is_empty()) {
+        for part in raw
+            .split('|')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             let Some((key, value)) = part.split_once('=') else {
                 return Err(format!("Invalid token pool part '{part}'"));
             };
@@ -192,5 +237,15 @@ mod tests {
         let err = TokenPool::parse_list("id=charge|token=fa-bolt|starting=5|max=3")
             .expect_err("invalid token pool");
         assert!(err.contains("max"));
+    }
+
+    #[test]
+    fn enforces_minimum_when_removing_tokens() {
+        let mut pool = TokenPool::parse_list("id=charge|token=fa-bolt|starting=2|min=1")
+            .expect("parse token pool")
+            .remove(0);
+        assert!(pool.remove_tokens(2).is_err());
+        assert!(pool.remove_tokens(1).is_ok());
+        assert_eq!(pool.count, 1);
     }
 }

@@ -61,7 +61,11 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
             toughness: optional_value(&record, headers.get("toughness").copied()),
             is_commander: optional_bool(&record, headers.get("is_commander").copied()),
             is_partner: optional_bool(&record, headers.get("is_partner").copied()),
-            token_pools: optional_token_pools(&record, headers.get("token_pools").copied(), line_idx + 2)?,
+            token_pools: optional_token_pools(
+                &record,
+                headers.get("token_pools").copied(),
+                line_idx + 2,
+            )?,
         });
     }
 

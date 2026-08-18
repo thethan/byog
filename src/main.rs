@@ -1,6 +1,5 @@
 use byog::{
-    CardEngine, CardType, EngineError, TokenPool, Zone, cards_csv_path, load_cards,
-    moves_log_path,
+    CardEngine, CardType, EngineError, TokenPool, Zone, cards_csv_path, load_cards, moves_log_path,
 };
 
 fn main() {
@@ -23,12 +22,17 @@ fn run_demo() -> Result<(), EngineError> {
     }
 
     let mut engine = CardEngine::new(cards.clone(), Some(&move_log_path));
-    let mut energy_pool = TokenPool::new("energy", "Energy", "fa-bolt");
-    energy_pool.background = Some("slate".to_string());
-    energy_pool.min = Some(0);
-    energy_pool.max = Some(5);
-    energy_pool.count = 1;
-    energy_pool.active = true;
+    let energy_pool = TokenPool::configured(
+        "energy",
+        "Energy",
+        "fa-bolt",
+        Some("slate".to_string()),
+        1,
+        Some(0),
+        Some(5),
+        true,
+    )
+    .map_err(EngineError::Validation)?;
     engine.set_zone_token_pools(Zone::Hand, vec![energy_pool])?;
 
     let mut commander_ids = Vec::new();
