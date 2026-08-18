@@ -100,12 +100,6 @@ impl CardEngine {
     }
 
     pub fn exile(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
-        if matches!(from, Zone::MainStack) {
-            return Err(EngineError::Validation(
-                "Exile from hidden MainStack is not allowed directly".to_string(),
-            ));
-        }
-
         self.state.move_card(from, Zone::Exile, card_id)?;
         let card = self.state.card_by_id(card_id)?;
         self.logger
