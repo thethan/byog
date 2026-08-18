@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::card::{Card, CardType};
 use crate::move_logger::{MoveLogEntry, MoveLogger};
+use crate::token_pool::TokenPool;
 use crate::zones::{GameState, Zone};
 
 #[derive(Debug)]
@@ -127,6 +128,62 @@ impl CardEngine {
     pub fn peek_main_stack(&self, count: usize) -> Vec<String> {
         self.state.peek_main_stack(count)
     }
+
+    pub fn set_zone_token_pools(
+        &mut self,
+        zone: Zone,
+        pools: Vec<TokenPool>,
+    ) -> Result<(), EngineError> {
+        self.state.set_zone_token_pools(zone, pools)
+    }
+
+    pub fn add_zone_token_pool(&mut self, zone: Zone, pool: TokenPool) -> Result<(), EngineError> {
+        self.state.add_zone_token_pool(zone, pool)
+    }
+
+    pub fn add_card_token_pool(
+        &mut self,
+        card_id: &str,
+        pool: TokenPool,
+    ) -> Result<(), EngineError> {
+        self.state.add_card_token_pool(card_id, pool)
+    }
+
+    pub fn activate_zone_token_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        active: bool,
+    ) -> Result<(), EngineError> {
+        self.state.activate_zone_token_pool(zone, pool_id, active)
+    }
+
+    pub fn activate_card_token_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        active: bool,
+    ) -> Result<(), EngineError> {
+        self.state.activate_card_token_pool(card_id, pool_id, active)
+    }
+
+    pub fn add_tokens_to_zone_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state.add_tokens_to_zone_pool(zone, pool_id, amount)
+    }
+
+    pub fn add_tokens_to_card_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state.add_tokens_to_card_pool(card_id, pool_id, amount)
+    }
 }
 
 #[cfg(test)]
@@ -135,6 +192,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::card::{Card, CardType};
+    use crate::token_pool::TokenPool;
     use crate::zones::Zone;
 
     use super::CardEngine;
@@ -157,6 +215,7 @@ mod tests {
             toughness: None,
             is_commander,
             is_partner,
+            token_pools: Vec::new(),
         }
     }
 
@@ -267,6 +326,110 @@ mod tests {
             "timestamp,action,card_id,card_name,from_zone,to_zone,notes"
         );
         assert_eq!(lines.len(), 3);
+
+        fs::remove_file(log_path).ok();
+    }
+
+    #[test]
+    fn manages_zone_and_card_token_pools() {
+        let log_path = test_log_path("tokens");
+        let mut engine = CardEngine::new(
+            vec![Card {
+                id: "ring".to_string(),
+                name: "Sol Ring".to_string(),
+                card_type: CardType::Artifact,
+                mana_cost: None,
+                colors: None,
+                oracle_text: None,
+                power: None,
+                toughness: None,
+                is_commander: false,
+                is_partner: false,
+                token_pools: vec![{
+                    let mut pool = TokenPool::new("charge", "Charge", "fa-bolt");
+                    pool.background = Some("amber".to_string());
+                    pool.count = 1;
+                    pool.max = Some(3);
+                    pool.active = true;
+                    pool
+                }],
+            }],
+            Some(&log_path),
+        );
+
+        engine
+            .set_zone_token_pools(Zone::Hand, vec![{
+                let mut pool = TokenPool::new("energy", "Energy", "fa-fire");
+                pool.background = Some("slate".to_string());
+                pool.min = Some(0);
+                pool.max = Some(2);
+                pool
+            }])
+            .expect("seed zone token pools");
+
+        engine
+            .activate_zone_token_pool(Zone::Hand, "energy", true)
+            .expect("activate zone pool");
+        engine
+            .add_tokens_to_zone_pool(Zone::Hand, "energy", 2)
+            .expect("add zone tokens");
+        engine
+            .add_tokens_to_card_pool("ring", "charge", 1)
+            .expect("add card tokens");
+
+        assert_eq!(
+            engine
+                .state
+                .zone_token_pool_icon(Zone::Hand, "energy")
+                .expect("zone token icon"),
+            "fa-fire"
+        );
+        assert_eq!(
+            engine
+                .state
+                .zone_token_pool_background(Zone::Hand, "energy")
+                .expect("zone background"),
+            Some("slate")
+        );
+        assert_eq!(
+            engine
+                .state
+                .card_token_pool_icon("ring", "charge")
+                .expect("card token icon"),
+            "fa-bolt"
+        );
+        assert_eq!(
+            engine
+                .state
+                .card_token_pool_background("ring", "charge")
+                .expect("card background"),
+            Some("amber")
+        );
+        assert_eq!(
+            engine
+                .state
+                .zone_token_pools(Zone::Hand)
+                .expect("zone token pools")
+                .get("energy")
+                .expect("energy pool")
+                .count,
+            2
+        );
+        assert_eq!(
+            engine
+                .state
+                .card_token_pools("ring")
+                .expect("card pools")
+                .and_then(|pools| pools.get("charge"))
+                .expect("charge pool")
+                .count,
+            2
+        );
+        assert!(
+            engine
+                .add_tokens_to_zone_pool(Zone::Hand, "energy", 1)
+                .is_err()
+        );
 
         fs::remove_file(log_path).ok();
     }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::card::Card;
 use crate::engine::EngineError;
+use crate::token_pool::TokenPool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Zone {
@@ -60,6 +61,8 @@ impl std::fmt::Display for Zone {
 pub struct GameState {
     pub cards: HashMap<String, Card>,
     pub zones: HashMap<Zone, Vec<String>>,
+    pub zone_token_pools: HashMap<Zone, HashMap<String, TokenPool>>,
+    pub card_token_pools: HashMap<String, HashMap<String, TokenPool>>,
 }
 
 impl GameState {
@@ -69,12 +72,34 @@ impl GameState {
             .map(|card| (card.id.clone(), card))
             .collect::<HashMap<_, _>>();
 
+        let card_token_pools = cards
+            .values()
+            .filter(|card| !card.token_pools.is_empty())
+            .map(|card| {
+                (
+                    card.id.clone(),
+                    card.token_pools
+                        .iter()
+                        .cloned()
+                        .map(|pool| (pool.id.clone(), pool))
+                        .collect::<HashMap<_, _>>(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
         let mut zones = HashMap::new();
+        let mut zone_token_pools = HashMap::new();
         for zone in Zone::ALL {
             zones.insert(*zone, Vec::new());
+            zone_token_pools.insert(*zone, HashMap::new());
         }
 
-        Self { cards, zones }
+        Self {
+            cards,
+            zones,
+            zone_token_pools,
+            card_token_pools,
+        }
     }
 
     pub fn set_zone_cards(&mut self, zone: Zone, card_ids: Vec<String>) -> Result<(), EngineError> {
@@ -151,13 +176,131 @@ impl GameState {
         Ok(())
     }
 
+    pub fn set_zone_token_pools(
+        &mut self,
+        zone: Zone,
+        pools: Vec<TokenPool>,
+    ) -> Result<(), EngineError> {
+        let pools = self.validate_token_pools(pools)?;
+        self.zone_token_pools.insert(zone, pools);
+        Ok(())
+    }
+
+    pub fn add_zone_token_pool(&mut self, zone: Zone, pool: TokenPool) -> Result<(), EngineError> {
+        let pool = self.validate_token_pool(pool)?;
+        self.zone_token_pools
+            .get_mut(&zone)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))?
+            .insert(pool.id.clone(), pool);
+        Ok(())
+    }
+
+    pub fn add_card_token_pool(
+        &mut self,
+        card_id: &str,
+        pool: TokenPool,
+    ) -> Result<(), EngineError> {
+        self.ensure_card_exists(card_id)?;
+        let pool = self.validate_token_pool(pool)?;
+        self.card_token_pools
+            .entry(card_id.to_string())
+            .or_default()
+            .insert(pool.id.clone(), pool);
+        Ok(())
+    }
+
+    pub fn zone_token_pools(&self, zone: Zone) -> Result<&HashMap<String, TokenPool>, EngineError> {
+        self.zone_token_pools
+            .get(&zone)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))
+    }
+
+    pub fn card_token_pools(
+        &self,
+        card_id: &str,
+    ) -> Result<Option<&HashMap<String, TokenPool>>, EngineError> {
+        self.ensure_card_exists(card_id)?;
+        Ok(self.card_token_pools.get(card_id))
+    }
+
+    pub fn activate_zone_token_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        active: bool,
+    ) -> Result<(), EngineError> {
+        self.zone_token_pool_mut(zone, pool_id)?.set_active(active);
+        Ok(())
+    }
+
+    pub fn activate_card_token_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        active: bool,
+    ) -> Result<(), EngineError> {
+        self.card_token_pool_mut(card_id, pool_id)?.set_active(active);
+        Ok(())
+    }
+
+    pub fn add_tokens_to_zone_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.zone_token_pool_mut(zone, pool_id)?
+            .add_tokens(amount)
+            .map_err(EngineError::Validation)
+    }
+
+    pub fn add_tokens_to_card_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.card_token_pool_mut(card_id, pool_id)?
+            .add_tokens(amount)
+            .map_err(EngineError::Validation)
+    }
+
+    pub fn zone_token_pool_icon(&self, zone: Zone, pool_id: &str) -> Result<&str, EngineError> {
+        Ok(self.zone_token_pool(zone, pool_id)?.token())
+    }
+
+    pub fn card_token_pool_icon(&self, card_id: &str, pool_id: &str) -> Result<&str, EngineError> {
+        Ok(self.card_token_pool(card_id, pool_id)?.token())
+    }
+
+    pub fn zone_token_pool_background(
+        &self,
+        zone: Zone,
+        pool_id: &str,
+    ) -> Result<Option<&str>, EngineError> {
+        Ok(self.zone_token_pool(zone, pool_id)?.background())
+    }
+
+    pub fn card_token_pool_background(
+        &self,
+        card_id: &str,
+        pool_id: &str,
+    ) -> Result<Option<&str>, EngineError> {
+        Ok(self.card_token_pool(card_id, pool_id)?.background())
+    }
+
     fn ensure_cards_exist(&self, card_ids: &[String]) -> Result<(), EngineError> {
         for card_id in card_ids {
-            if !self.cards.contains_key(card_id) {
-                return Err(EngineError::Validation(format!(
-                    "Unknown card id '{card_id}'"
-                )));
-            }
+            self.ensure_card_exists(card_id)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_card_exists(&self, card_id: &str) -> Result<(), EngineError> {
+        if !self.cards.contains_key(card_id) {
+            return Err(EngineError::Validation(format!(
+                "Unknown card id '{card_id}'"
+            )));
         }
         Ok(())
     }
@@ -187,5 +330,64 @@ impl GameState {
         self.cards
             .get(card_id)
             .ok_or_else(|| EngineError::Validation(format!("Unknown card id '{card_id}'")))
+    }
+
+    fn validate_token_pools(
+        &self,
+        pools: Vec<TokenPool>,
+    ) -> Result<HashMap<String, TokenPool>, EngineError> {
+        let mut validated = HashMap::new();
+        for pool in pools {
+            let pool = self.validate_token_pool(pool)?;
+            if validated.insert(pool.id.clone(), pool).is_some() {
+                return Err(EngineError::Validation(
+                    "Duplicate token pool id in the same owner".to_string(),
+                ));
+            }
+        }
+        Ok(validated)
+    }
+
+    fn validate_token_pool(&self, pool: TokenPool) -> Result<TokenPool, EngineError> {
+        pool.validate().map_err(EngineError::Validation)?;
+        Ok(pool)
+    }
+
+    fn zone_token_pool(&self, zone: Zone, pool_id: &str) -> Result<&TokenPool, EngineError> {
+        self.zone_token_pools(zone)?
+            .get(pool_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{pool_id}'")))
+    }
+
+    fn zone_token_pool_mut(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+    ) -> Result<&mut TokenPool, EngineError> {
+        self.zone_token_pools
+            .get_mut(&zone)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))?
+            .get_mut(pool_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{pool_id}'")))
+    }
+
+    fn card_token_pool(&self, card_id: &str, pool_id: &str) -> Result<&TokenPool, EngineError> {
+        self.ensure_card_exists(card_id)?;
+        self.card_token_pools
+            .get(card_id)
+            .and_then(|pools| pools.get(pool_id))
+            .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{pool_id}'")))
+    }
+
+    fn card_token_pool_mut(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+    ) -> Result<&mut TokenPool, EngineError> {
+        self.ensure_card_exists(card_id)?;
+        self.card_token_pools
+            .get_mut(card_id)
+            .and_then(|pools| pools.get_mut(pool_id))
+            .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{pool_id}'")))
     }
 }

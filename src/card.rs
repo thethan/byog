@@ -1,3 +1,5 @@
+use crate::token_pool::TokenPool;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CardType {
     Land,
@@ -48,4 +50,5 @@ pub struct Card {
     pub toughness: Option<String>,
     pub is_commander: bool,
     pub is_partner: bool,
+    pub token_pools: Vec<TokenPool>,
 }

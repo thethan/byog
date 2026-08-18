@@ -1,4 +1,7 @@
-use byog::{CardEngine, CardType, EngineError, Zone, cards_csv_path, load_cards, moves_log_path};
+use byog::{
+    CardEngine, CardType, EngineError, TokenPool, Zone, cards_csv_path, load_cards,
+    moves_log_path,
+};
 
 fn main() {
     if let Err(err) = run_demo() {
@@ -20,6 +23,13 @@ fn run_demo() -> Result<(), EngineError> {
     }
 
     let mut engine = CardEngine::new(cards.clone(), Some(&move_log_path));
+    let mut energy_pool = TokenPool::new("energy", "Energy", "fa-bolt");
+    energy_pool.background = Some("slate".to_string());
+    energy_pool.min = Some(0);
+    energy_pool.max = Some(5);
+    energy_pool.count = 1;
+    energy_pool.active = true;
+    engine.set_zone_token_pools(Zone::Hand, vec![energy_pool])?;
 
     let mut commander_ids = Vec::new();
     let mut main_stack = Vec::new();
@@ -68,7 +78,17 @@ fn run_demo() -> Result<(), EngineError> {
         engine.discard(Zone::Hand, &second_draw.card_id)?;
     }
 
+    engine.add_tokens_to_zone_pool(Zone::Hand, "energy", 1)?;
+
     println!("Loaded cards from: {}", cards_path.display());
     println!("Move log written to: {}", move_log_path.display());
+    println!(
+        "Hand energy token: {} / background: {}",
+        engine.state.zone_token_pool_icon(Zone::Hand, "energy")?,
+        engine
+            .state
+            .zone_token_pool_background(Zone::Hand, "energy")?
+            .unwrap_or("none")
+    );
     Ok(())
 }
