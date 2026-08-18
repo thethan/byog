@@ -164,7 +164,8 @@ impl CardEngine {
         pool_id: &str,
         active: bool,
     ) -> Result<(), EngineError> {
-        self.state.activate_card_token_pool(card_id, pool_id, active)
+        self.state
+            .activate_card_token_pool(card_id, pool_id, active)
     }
 
     pub fn add_tokens_to_zone_pool(
@@ -183,6 +184,26 @@ impl CardEngine {
         amount: u32,
     ) -> Result<(), EngineError> {
         self.state.add_tokens_to_card_pool(card_id, pool_id, amount)
+    }
+
+    pub fn remove_tokens_from_zone_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state
+            .remove_tokens_from_zone_pool(zone, pool_id, amount)
+    }
+
+    pub fn remove_tokens_from_card_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state
+            .remove_tokens_from_card_pool(card_id, pool_id, amount)
     }
 }
 
@@ -345,26 +366,40 @@ mod tests {
                 toughness: None,
                 is_commander: false,
                 is_partner: false,
-                token_pools: vec![{
-                    let mut pool = TokenPool::new("charge", "Charge", "fa-bolt");
-                    pool.background = Some("amber".to_string());
-                    pool.count = 1;
-                    pool.max = Some(3);
-                    pool.active = true;
-                    pool
-                }],
+                token_pools: vec![
+                    TokenPool::configured(
+                        "charge",
+                        "Charge",
+                        "fa-bolt",
+                        Some("amber".to_string()),
+                        1,
+                        None,
+                        Some(3),
+                        true,
+                    )
+                    .expect("card token pool"),
+                ],
             }],
             Some(&log_path),
         );
 
         engine
-            .set_zone_token_pools(Zone::Hand, vec![{
-                let mut pool = TokenPool::new("energy", "Energy", "fa-fire");
-                pool.background = Some("slate".to_string());
-                pool.min = Some(0);
-                pool.max = Some(2);
-                pool
-            }])
+            .set_zone_token_pools(
+                Zone::Hand,
+                vec![
+                    TokenPool::configured(
+                        "energy",
+                        "Energy",
+                        "fa-fire",
+                        Some("slate".to_string()),
+                        0,
+                        Some(0),
+                        Some(2),
+                        false,
+                    )
+                    .expect("zone token pool"),
+                ],
+            )
             .expect("seed zone token pools");
 
         engine
@@ -408,7 +443,7 @@ mod tests {
         assert_eq!(
             engine
                 .state
-                .zone_token_pools(Zone::Hand)
+                .get_zone_token_pools(Zone::Hand)
                 .expect("zone token pools")
                 .get("energy")
                 .expect("energy pool")
@@ -418,7 +453,7 @@ mod tests {
         assert_eq!(
             engine
                 .state
-                .card_token_pools("ring")
+                .get_card_token_pools("ring")
                 .expect("card pools")
                 .and_then(|pools| pools.get("charge"))
                 .expect("charge pool")
@@ -427,7 +462,17 @@ mod tests {
         );
         assert!(
             engine
-                .add_tokens_to_zone_pool(Zone::Hand, "energy", 1)
+                .remove_tokens_from_zone_pool(Zone::Hand, "energy", 2)
+                .is_ok()
+        );
+        assert!(
+            engine
+                .remove_tokens_from_card_pool("ring", "charge", 3)
+                .is_err()
+        );
+        assert!(
+            engine
+                .add_tokens_to_zone_pool(Zone::Hand, "energy", 3)
                 .is_err()
         );
 

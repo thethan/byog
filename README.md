@@ -61,10 +61,10 @@ The demo:
 
 Token pools can belong to zones or to individual cards.
 
-- Zone pools are managed on `GameState` / `CardEngine` with `set_zone_token_pools`, `add_zone_token_pool`, `activate_zone_token_pool`, and `add_tokens_to_zone_pool`.
+- Zone pools are managed on `GameState` / `CardEngine` with `set_zone_token_pools`, `add_zone_token_pool`, `activate_zone_token_pool`, `add_tokens_to_zone_pool`, and `remove_tokens_from_zone_pool`.
 - Card pools are loaded from `token_pools` CSV data or added later with `add_card_token_pool`.
 - Pools expose `token()` for the display token/icon and `background()` for UI styling.
-- `min` and `max` bounds are validated when pools are created and when tokens are added.
+- `min` and `max` bounds are validated when pools are created and whenever token counts change.
 
 ## Move log format
 

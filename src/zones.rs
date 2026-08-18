@@ -209,13 +209,16 @@ impl GameState {
         Ok(())
     }
 
-    pub fn zone_token_pools(&self, zone: Zone) -> Result<&HashMap<String, TokenPool>, EngineError> {
+    pub fn get_zone_token_pools(
+        &self,
+        zone: Zone,
+    ) -> Result<&HashMap<String, TokenPool>, EngineError> {
         self.zone_token_pools
             .get(&zone)
             .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))
     }
 
-    pub fn card_token_pools(
+    pub fn get_card_token_pools(
         &self,
         card_id: &str,
     ) -> Result<Option<&HashMap<String, TokenPool>>, EngineError> {
@@ -239,7 +242,8 @@ impl GameState {
         pool_id: &str,
         active: bool,
     ) -> Result<(), EngineError> {
-        self.card_token_pool_mut(card_id, pool_id)?.set_active(active);
+        self.card_token_pool_mut(card_id, pool_id)?
+            .set_active(active);
         Ok(())
     }
 
@@ -262,6 +266,28 @@ impl GameState {
     ) -> Result<(), EngineError> {
         self.card_token_pool_mut(card_id, pool_id)?
             .add_tokens(amount)
+            .map_err(EngineError::Validation)
+    }
+
+    pub fn remove_tokens_from_zone_pool(
+        &mut self,
+        zone: Zone,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.zone_token_pool_mut(zone, pool_id)?
+            .remove_tokens(amount)
+            .map_err(EngineError::Validation)
+    }
+
+    pub fn remove_tokens_from_card_pool(
+        &mut self,
+        card_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.card_token_pool_mut(card_id, pool_id)?
+            .remove_tokens(amount)
             .map_err(EngineError::Validation)
     }
 
@@ -336,13 +362,21 @@ impl GameState {
         &self,
         pools: Vec<TokenPool>,
     ) -> Result<HashMap<String, TokenPool>, EngineError> {
+        use std::collections::hash_map::Entry;
+
         let mut validated = HashMap::new();
         for pool in pools {
             let pool = self.validate_token_pool(pool)?;
-            if validated.insert(pool.id.clone(), pool).is_some() {
-                return Err(EngineError::Validation(
-                    "Duplicate token pool id in the same owner".to_string(),
-                ));
+            match validated.entry(pool.id.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(pool);
+                }
+                Entry::Occupied(entry) => {
+                    return Err(EngineError::Validation(format!(
+                        "Duplicate token pool id '{}' in the same owner",
+                        entry.key()
+                    )));
+                }
             }
         }
         Ok(validated)
@@ -354,7 +388,7 @@ impl GameState {
     }
 
     fn zone_token_pool(&self, zone: Zone, pool_id: &str) -> Result<&TokenPool, EngineError> {
-        self.zone_token_pools(zone)?
+        self.get_zone_token_pools(zone)?
             .get(pool_id)
             .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{pool_id}'")))
     }
