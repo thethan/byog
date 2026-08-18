@@ -145,7 +145,13 @@ mod tests {
 
     use super::CardEngine;
 
-    fn test_card(id: &str, name: &str, card_type: CardType, is_partner: bool) -> Card {
+    fn test_card(
+        id: &str,
+        name: &str,
+        card_type: CardType,
+        is_commander: bool,
+        is_partner: bool,
+    ) -> Card {
         Card {
             id: id.to_string(),
             name: name.to_string(),
@@ -155,7 +161,7 @@ mod tests {
             oracle_text: None,
             power: None,
             toughness: None,
-            is_commander: true,
+            is_commander,
             is_partner,
         }
     }
@@ -173,8 +179,14 @@ mod tests {
         let log_path = test_log_path("moves");
         let mut engine = CardEngine::new(
             vec![
-                test_card("land", "Island", CardType::Land, false),
-                test_card("creature", "Grizzly Bears", CardType::Creature, false),
+                test_card("land", "Island", CardType::Land, false, false),
+                test_card(
+                    "creature",
+                    "Grizzly Bears",
+                    CardType::Creature,
+                    false,
+                    false,
+                ),
             ],
             Some(&log_path),
         );
@@ -202,9 +214,9 @@ mod tests {
         let log_path = test_log_path("commander");
         let mut engine = CardEngine::new(
             vec![
-                test_card("p1", "Partner One", CardType::Creature, true),
-                test_card("p2", "Partner Two", CardType::Creature, true),
-                test_card("solo", "Solo Commander", CardType::Creature, false),
+                test_card("p1", "Partner One", CardType::Creature, true, true),
+                test_card("p2", "Partner Two", CardType::Creature, true, true),
+                test_card("solo", "Solo Commander", CardType::Creature, true, false),
             ],
             Some(&log_path),
         );
@@ -234,7 +246,13 @@ mod tests {
     fn move_log_appends_rows_with_header_once() {
         let log_path = test_log_path("log");
         let mut engine = CardEngine::new(
-            vec![test_card("c1", "Card One", CardType::Creature, false)],
+            vec![test_card(
+                "c1",
+                "Card One",
+                CardType::Creature,
+                false,
+                false,
+            )],
             Some(&log_path),
         );
 

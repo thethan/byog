@@ -18,7 +18,7 @@ pub enum Zone {
 }
 
 impl Zone {
-    pub const ALL: [Zone; 10] = [
+    pub const ALL: &'static [Zone] = &[
         Zone::MainStack,
         Zone::CommanderPile,
         Zone::Hand,
@@ -71,7 +71,7 @@ impl GameState {
 
         let mut zones = HashMap::new();
         for zone in Zone::ALL {
-            zones.insert(zone, Vec::new());
+            zones.insert(*zone, Vec::new());
         }
 
         Self { cards, zones }
@@ -108,10 +108,6 @@ impl GameState {
     }
 
     pub fn move_card(&mut self, from: Zone, to: Zone, card_id: &str) -> Result<(), EngineError> {
-        if from == to {
-            return Ok(());
-        }
-
         let source = self
             .zones
             .get(&from)
@@ -120,6 +116,9 @@ impl GameState {
             return Err(EngineError::Validation(format!(
                 "Card '{card_id}' is not in source zone {from}"
             )));
+        }
+        if from == to {
+            return Ok(());
         }
 
         if to == Zone::CommanderPile {

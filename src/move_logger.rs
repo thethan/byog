@@ -1,5 +1,6 @@
 use std::env;
 use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -51,18 +52,29 @@ impl MoveLogger {
             fs::create_dir_all(parent).map_err(EngineError::Io)?;
         }
 
-        let file_exists = self.path.exists();
-        let file = OpenOptions::new()
+        let (file, should_write_header) = match OpenOptions::new()
             .append(true)
-            .create(true)
+            .create_new(true)
             .open(&self.path)
-            .map_err(EngineError::Io)?;
+        {
+            Ok(file) => (file, true),
+            Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                let should_write_header =
+                    fs::metadata(&self.path).map_err(EngineError::Io)?.len() == 0;
+                let file = OpenOptions::new()
+                    .append(true)
+                    .open(&self.path)
+                    .map_err(EngineError::Io)?;
+                (file, should_write_header)
+            }
+            Err(err) => return Err(EngineError::Io(err)),
+        };
 
         let mut writer = csv::WriterBuilder::new()
             .has_headers(false)
             .from_writer(file);
 
-        if !file_exists {
+        if should_write_header {
             writer
                 .write_record([
                     "timestamp",

@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use byog::{CardEngine, CardType, EngineError, Zone, cards_csv_path, load_cards, moves_log_path};
 
 fn main() {
@@ -70,8 +68,7 @@ fn run_demo() -> Result<(), EngineError> {
         engine.discard(Zone::Hand, &second_draw.card_id)?;
     }
 
-    let confirmed: PathBuf = move_log_path;
     println!("Loaded cards from: {}", cards_path.display());
-    println!("Move log written to: {}", confirmed.display());
+    println!("Move log written to: {}", move_log_path.display());
     Ok(())
 }
