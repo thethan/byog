@@ -4,6 +4,7 @@ pub mod dice;
 pub mod engine;
 pub mod move_logger;
 pub mod token_pool;
+#[cfg(target_arch = "wasm32")]
 pub mod wasm;
 pub mod zones;
 
