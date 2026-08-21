@@ -25,7 +25,17 @@ impl WasmGame {
             return Err(JsValue::from_str("No cards found in embedded CSV"));
         }
 
-        let mut engine = CardEngine::new(cards.clone(), None);
+        let mut commander_ids = Vec::new();
+        let mut main_stack = Vec::new();
+        for card in &cards {
+            if card.is_commander && commander_ids.len() < 2 {
+                commander_ids.push(card.id.clone());
+            } else {
+                main_stack.push(card.id.clone());
+            }
+        }
+
+        let mut engine = CardEngine::new(cards, None);
         let energy_pool = TokenPool::configured(
             "energy",
             "Energy",
@@ -40,17 +50,6 @@ impl WasmGame {
         engine
             .set_zone_token_pools(Zone::Hand, vec![energy_pool])
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
-
-        let mut commander_ids = Vec::new();
-        let mut main_stack = Vec::new();
-
-        for card in cards {
-            if card.is_commander && commander_ids.len() < 2 {
-                commander_ids.push(card.id.clone());
-            } else {
-                main_stack.push(card.id.clone());
-            }
-        }
 
         if !commander_ids.is_empty() {
             engine
