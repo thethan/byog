@@ -86,6 +86,10 @@ function renderState(state) {
 }
 
 async function runAction(action, message) {
+  if (!game) {
+    statusEl.textContent = "Game is still initializing.";
+    return;
+  }
   try {
     const next = await action();
     statusEl.textContent = message;
