@@ -83,7 +83,7 @@ function renderState(state) {
 
 async function runAction(action, message) {
   try {
-    const next = action();
+    const next = await action();
     statusEl.textContent = message;
     renderState(next);
   } catch (error) {
