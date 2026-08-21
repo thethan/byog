@@ -6,6 +6,7 @@ const drawBtn = document.getElementById("draw-btn");
 const autoPlayBtn = document.getElementById("auto-play-btn");
 const discardBtn = document.getElementById("discard-btn");
 const energyBtn = document.getElementById("energy-btn");
+const controls = [drawBtn, autoPlayBtn, discardBtn, energyBtn];
 
 const zoneClassMap = {
   MainStack: "border-indigo-700/70",
@@ -21,6 +22,9 @@ const zoneClassMap = {
 };
 
 let game;
+for (const control of controls) {
+  control.disabled = true;
+}
 
 function renderState(state) {
   zonesEl.innerHTML = "";
@@ -97,6 +101,9 @@ async function boot() {
     game = new WasmGame();
     const state = game.state_json();
     renderState(state);
+    for (const control of controls) {
+      control.disabled = false;
+    }
     statusEl.textContent = "Ready";
   } catch (error) {
     statusEl.textContent = `Initialization failed: ${error}`;
