@@ -110,3 +110,42 @@ Sample move row:
 ```csv
 2026-08-18T15:00:00Z,draw,land1,Plains,MainStack,Hand,
 ```
+
+## Web app (Tailwind + WebAssembly)
+
+The repository now includes a playable browser app with a Tailwind layout for every zone:
+
+- MainStack
+- CommanderPile
+- Hand
+- LandPile
+- Deck
+- Discard
+- Exile
+- ArtifactList
+- EnchantmentList
+- CreatureList
+
+### Build Rust to WebAssembly
+
+```bash
+cargo install wasm-pack
+wasm-pack build --target web --out-dir pkg
+```
+
+### Run the app
+
+Serve the repository root with any static server and open `/web/`:
+
+```bash
+python -m http.server 8000
+```
+
+Then visit `http://localhost:8000/web/`.
+
+### Play controls
+
+- **Draw**: move top card into Hand
+- **Auto Play First Hand Card**: land goes to LandPile, artifact/enchantment/creature goes to battlefield zones, others are discarded
+- **Discard First Hand Card**: move first hand card to Discard
+- **+1 Hand Energy**: increments the Hand zone energy token pool
