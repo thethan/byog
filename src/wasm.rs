@@ -67,19 +67,19 @@ impl WasmGame {
         Ok(Self { engine })
     }
 
-    pub fn state_json(&self) -> Result<String, JsValue> {
-        self.snapshot_json()
+    pub fn state_json(&self) -> Result<JsValue, JsValue> {
+        self.snapshot_value()
             .map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn draw(&mut self) -> Result<String, JsValue> {
+    pub fn draw(&mut self) -> Result<JsValue, JsValue> {
         self.engine
             .draw()
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
         self.state_json()
     }
 
-    pub fn auto_play_first_hand_card(&mut self) -> Result<String, JsValue> {
+    pub fn auto_play_first_hand_card(&mut self) -> Result<JsValue, JsValue> {
         let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
             return self.state_json();
         };
@@ -110,7 +110,7 @@ impl WasmGame {
         self.state_json()
     }
 
-    pub fn discard_first_hand_card(&mut self) -> Result<String, JsValue> {
+    pub fn discard_first_hand_card(&mut self) -> Result<JsValue, JsValue> {
         let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
             return self.state_json();
         };
@@ -120,7 +120,7 @@ impl WasmGame {
         self.state_json()
     }
 
-    pub fn add_hand_energy(&mut self, amount: u32) -> Result<String, JsValue> {
+    pub fn add_hand_energy(&mut self, amount: u32) -> Result<JsValue, JsValue> {
         self.engine
             .add_tokens_to_zone_pool(Zone::Hand, "energy", amount)
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
@@ -129,7 +129,7 @@ impl WasmGame {
 }
 
 impl WasmGame {
-    fn snapshot_json(&self) -> Result<String, EngineError> {
+    fn snapshot_value(&self) -> Result<JsValue, EngineError> {
         let zones = Zone::ALL
             .iter()
             .map(|zone| {
@@ -170,7 +170,7 @@ impl WasmGame {
             })
             .collect::<Result<Vec<_>, EngineError>>()?;
 
-        serde_json::to_string(&GameSnapshot { zones })
+        serde_wasm_bindgen::to_value(&GameSnapshot { zones })
             .map_err(|err| EngineError::Validation(err.to_string()))
     }
 }
