@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use js_sys::{Array, Object, Reflect};
+use prost::Message;
 use wasm_bindgen::prelude::*;
 
 use crate::card::{Card, CardType};
@@ -66,21 +66,21 @@ impl WasmGame {
         Ok(Self { engine })
     }
 
-    pub fn state_json(&self) -> Result<JsValue, JsValue> {
-        self.snapshot_value()
+    pub fn state_proto(&self) -> Result<Vec<u8>, JsValue> {
+        self.snapshot_proto()
             .map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn draw(&mut self) -> Result<JsValue, JsValue> {
+    pub fn draw(&mut self) -> Result<Vec<u8>, JsValue> {
         self.engine
             .draw()
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
-        self.state_json()
+        self.state_proto()
     }
 
-    pub fn auto_play_first_hand_card(&mut self) -> Result<JsValue, JsValue> {
+    pub fn auto_play_first_hand_card(&mut self) -> Result<Vec<u8>, JsValue> {
         let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
-            return self.state_json();
+            return self.state_proto();
         };
 
         let card_type = self
@@ -106,88 +106,110 @@ impl WasmGame {
                 .map_err(|err| JsValue::from_str(&err.to_string()))?,
         };
 
-        self.state_json()
+        self.state_proto()
     }
 
-    pub fn discard_first_hand_card(&mut self) -> Result<JsValue, JsValue> {
+    pub fn discard_first_hand_card(&mut self) -> Result<Vec<u8>, JsValue> {
         let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
-            return self.state_json();
+            return self.state_proto();
         };
         self.engine
             .discard(Zone::Hand, &card_id)
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
-        self.state_json()
+        self.state_proto()
     }
 
-    pub fn add_hand_energy(&mut self, amount: u32) -> Result<JsValue, JsValue> {
+    pub fn add_hand_energy(&mut self, amount: u32) -> Result<Vec<u8>, JsValue> {
         self.engine
             .add_tokens_to_zone_pool(Zone::Hand, "energy", amount)
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
-        self.state_json()
+        self.state_proto()
     }
 }
 
 impl WasmGame {
-    fn snapshot_value(&self) -> Result<JsValue, EngineError> {
-        let snapshot = Object::new();
-        let zones = Array::new();
-
+    fn snapshot_proto(&self) -> Result<Vec<u8>, EngineError> {
+        let mut zones = Vec::new();
         for zone in Zone::ALL {
-            let zone_view = Object::new();
-            set_property(&zone_view, "id", JsValue::from_str(&zone.to_string()))?;
-            set_property(
-                &zone_view,
-                "battlefield",
-                JsValue::from_bool(zone.is_battlefield()),
-            )?;
-
-            let cards = Array::new();
+            let mut cards = Vec::new();
             for card_id in self.engine.state.zone_cards(*zone) {
                 let card = self.engine.state.card_by_id(card_id)?;
-                let card_view = Object::new();
-                set_property(&card_view, "id", JsValue::from_str(&card.id))?;
-                set_property(&card_view, "name", JsValue::from_str(&card.name))?;
-                set_property(
-                    &card_view,
-                    "card_type",
-                    JsValue::from_str(&card.card_type.to_string()),
-                )?;
-                cards.push(&card_view);
+                cards.push(CardViewProto {
+                    id: card.id.clone(),
+                    name: card.name.clone(),
+                    card_type: card.card_type.to_string(),
+                });
             }
-            set_property(&zone_view, "cards", cards.into())?;
-
-            let token_pools = Array::new();
+            let mut token_pools = Vec::new();
             for pool in self.engine.state.get_zone_token_pools(*zone)?.values() {
-                let token_view = Object::new();
-                set_property(&token_view, "id", JsValue::from_str(&pool.id))?;
-                set_property(&token_view, "label", JsValue::from_str(&pool.label))?;
-                set_property(&token_view, "token", JsValue::from_str(&pool.token))?;
-                let background = pool
-                    .background
-                    .as_ref()
-                    .map_or(JsValue::NULL, |value| JsValue::from_str(value));
-                set_property(&token_view, "background", background)?;
-                set_property(
-                    &token_view,
-                    "count",
-                    JsValue::from_f64(f64::from(pool.count)),
-                )?;
-                set_property(&token_view, "active", JsValue::from_bool(pool.active))?;
-                token_pools.push(&token_view);
+                token_pools.push(TokenPoolViewProto {
+                    id: pool.id.clone(),
+                    label: pool.label.clone(),
+                    token: pool.token.clone(),
+                    background: pool.background.clone(),
+                    count: pool.count,
+                    active: pool.active,
+                });
             }
-            set_property(&zone_view, "token_pools", token_pools.into())?;
-            zones.push(&zone_view);
+            zones.push(ZoneViewProto {
+                id: zone.to_string(),
+                battlefield: zone.is_battlefield(),
+                cards,
+                token_pools,
+            });
         }
 
-        set_property(&snapshot, "zones", zones.into())?;
-        Ok(snapshot.into())
+        let snapshot = GameStateSnapshotProto { zones };
+        let mut bytes = Vec::new();
+        snapshot.encode(&mut bytes).map_err(|err| {
+            EngineError::Validation(format!("Failed to encode state protobuf: {err}"))
+        })?;
+        Ok(bytes)
     }
 }
 
-fn set_property(object: &Object, key: &str, value: JsValue) -> Result<(), EngineError> {
-    Reflect::set(object, &JsValue::from_str(key), &value)
-        .map(|_| ())
-        .map_err(|err| EngineError::Validation(format!("Failed to set '{key}': {err:?}")))
+#[derive(Clone, PartialEq, Message)]
+struct GameStateSnapshotProto {
+    #[prost(message, repeated, tag = "1")]
+    zones: Vec<ZoneViewProto>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct ZoneViewProto {
+    #[prost(string, tag = "1")]
+    id: String,
+    #[prost(bool, tag = "2")]
+    battlefield: bool,
+    #[prost(message, repeated, tag = "3")]
+    cards: Vec<CardViewProto>,
+    #[prost(message, repeated, tag = "4")]
+    token_pools: Vec<TokenPoolViewProto>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct CardViewProto {
+    #[prost(string, tag = "1")]
+    id: String,
+    #[prost(string, tag = "2")]
+    name: String,
+    #[prost(string, tag = "3")]
+    card_type: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TokenPoolViewProto {
+    #[prost(string, tag = "1")]
+    id: String,
+    #[prost(string, tag = "2")]
+    label: String,
+    #[prost(string, tag = "3")]
+    token: String,
+    #[prost(string, optional, tag = "4")]
+    background: Option<String>,
+    #[prost(uint32, tag = "5")]
+    count: u32,
+    #[prost(bool, tag = "6")]
+    active: bool,
 }
 
 fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError> {

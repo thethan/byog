@@ -1,4 +1,5 @@
 import init, { WasmGame } from "../pkg/byog.js";
+import protobuf from "https://cdn.jsdelivr.net/npm/protobufjs@7.4.0/+esm";
 
 const statusEl = document.getElementById("status");
 const zonesEl = document.getElementById("zones");
@@ -22,8 +23,47 @@ const zoneClassMap = {
 };
 
 let game;
+const protoSchema = `
+syntax = "proto3";
+
+message GameStateSnapshotProto {
+  repeated ZoneViewProto zones = 1;
+}
+
+message ZoneViewProto {
+  string id = 1;
+  bool battlefield = 2;
+  repeated CardViewProto cards = 3;
+  repeated TokenPoolViewProto token_pools = 4;
+}
+
+message CardViewProto {
+  string id = 1;
+  string name = 2;
+  string card_type = 3;
+}
+
+message TokenPoolViewProto {
+  string id = 1;
+  string label = 2;
+  string token = 3;
+  optional string background = 4;
+  uint32 count = 5;
+  bool active = 6;
+}
+`;
+const root = protobuf.parse(protoSchema, { keepCase: true }).root;
+const GameStateSnapshotProto = root.lookupType("GameStateSnapshotProto");
+
 for (const control of controls) {
   control.disabled = true;
+}
+
+function decodeState(protoBytes) {
+  const state = GameStateSnapshotProto.decode(protoBytes);
+  return GameStateSnapshotProto.toObject(state, {
+    defaults: true,
+  });
 }
 
 function renderState(state) {
@@ -91,7 +131,7 @@ async function runAction(action, message) {
     return;
   }
   try {
-    const next = await action();
+    const next = decodeState(await action());
     statusEl.textContent = message;
     renderState(next);
   } catch (error) {
@@ -103,7 +143,7 @@ async function boot() {
   try {
     await init();
     game = new WasmGame();
-    const state = game.state_json();
+    const state = decodeState(game.state_proto());
     renderState(state);
     for (const control of controls) {
       control.disabled = false;
