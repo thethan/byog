@@ -143,17 +143,16 @@ impl WasmGame {
 
             let cards = Array::new();
             for card_id in self.engine.state.zone_cards(*zone) {
-                if let Ok(card) = self.engine.state.card_by_id(card_id) {
-                    let card_view = Object::new();
-                    set_property(&card_view, "id", JsValue::from_str(&card.id))?;
-                    set_property(&card_view, "name", JsValue::from_str(&card.name))?;
-                    set_property(
-                        &card_view,
-                        "card_type",
-                        JsValue::from_str(&card.card_type.to_string()),
-                    )?;
-                    cards.push(&card_view);
-                }
+                let card = self.engine.state.card_by_id(card_id)?;
+                let card_view = Object::new();
+                set_property(&card_view, "id", JsValue::from_str(&card.id))?;
+                set_property(&card_view, "name", JsValue::from_str(&card.name))?;
+                set_property(
+                    &card_view,
+                    "card_type",
+                    JsValue::from_str(&card.card_type.to_string()),
+                )?;
+                cards.push(&card_view);
             }
             set_property(&zone_view, "cards", cards.into())?;
 
