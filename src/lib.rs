@@ -4,6 +4,7 @@ pub mod dice;
 pub mod engine;
 pub mod move_logger;
 pub mod token_pool;
+pub mod wasm;
 pub mod zones;
 
 pub use card::{Card, CardType};
