@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use serde::Serialize;
+use js_sys::{Array, Object, Reflect};
 use wasm_bindgen::prelude::*;
 
 use crate::card::{Card, CardType};
@@ -129,49 +129,66 @@ impl WasmGame {
 
 impl WasmGame {
     fn snapshot_value(&self) -> Result<JsValue, EngineError> {
-        let zones = Zone::ALL
-            .iter()
-            .map(|zone| {
-                let cards = self
-                    .engine
-                    .state
-                    .zone_cards(*zone)
-                    .iter()
-                    .filter_map(|card_id| self.engine.state.card_by_id(card_id).ok())
-                    .map(|card| CardView {
-                        id: card.id.clone(),
-                        name: card.name.clone(),
-                        card_type: card.card_type.to_string(),
-                    })
-                    .collect::<Vec<_>>();
+        let snapshot = Object::new();
+        let zones = Array::new();
 
-                let token_pools = self
-                    .engine
-                    .state
-                    .get_zone_token_pools(*zone)?
-                    .values()
-                    .map(|pool| TokenPoolView {
-                        id: pool.id.clone(),
-                        label: pool.label.clone(),
-                        token: pool.token.clone(),
-                        background: pool.background.clone(),
-                        count: pool.count,
-                        active: pool.active,
-                    })
-                    .collect::<Vec<_>>();
+        for zone in Zone::ALL {
+            let zone_view = Object::new();
+            set_property(&zone_view, "id", JsValue::from_str(&zone.to_string()))?;
+            set_property(
+                &zone_view,
+                "battlefield",
+                JsValue::from_bool(zone.is_battlefield()),
+            )?;
 
-                Ok(ZoneView {
-                    id: zone.to_string(),
-                    battlefield: zone.is_battlefield(),
-                    cards,
-                    token_pools,
-                })
-            })
-            .collect::<Result<Vec<_>, EngineError>>()?;
+            let cards = Array::new();
+            for card_id in self.engine.state.zone_cards(*zone) {
+                if let Ok(card) = self.engine.state.card_by_id(card_id) {
+                    let card_view = Object::new();
+                    set_property(&card_view, "id", JsValue::from_str(&card.id))?;
+                    set_property(&card_view, "name", JsValue::from_str(&card.name))?;
+                    set_property(
+                        &card_view,
+                        "card_type",
+                        JsValue::from_str(&card.card_type.to_string()),
+                    )?;
+                    cards.push(&card_view);
+                }
+            }
+            set_property(&zone_view, "cards", cards.into())?;
 
-        serde_wasm_bindgen::to_value(&GameSnapshot { zones })
-            .map_err(|err| EngineError::Validation(err.to_string()))
+            let token_pools = Array::new();
+            for pool in self.engine.state.get_zone_token_pools(*zone)?.values() {
+                let token_view = Object::new();
+                set_property(&token_view, "id", JsValue::from_str(&pool.id))?;
+                set_property(&token_view, "label", JsValue::from_str(&pool.label))?;
+                set_property(&token_view, "token", JsValue::from_str(&pool.token))?;
+                let background = pool
+                    .background
+                    .as_ref()
+                    .map_or(JsValue::NULL, |value| JsValue::from_str(value));
+                set_property(&token_view, "background", background)?;
+                set_property(
+                    &token_view,
+                    "count",
+                    JsValue::from_f64(f64::from(pool.count)),
+                )?;
+                set_property(&token_view, "active", JsValue::from_bool(pool.active))?;
+                token_pools.push(&token_view);
+            }
+            set_property(&zone_view, "token_pools", token_pools.into())?;
+            zones.push(&zone_view);
+        }
+
+        set_property(&snapshot, "zones", zones.into())?;
+        Ok(snapshot.into())
     }
+}
+
+fn set_property(object: &Object, key: &str, value: JsValue) -> Result<(), EngineError> {
+    Reflect::set(object, &JsValue::from_str(key), &value)
+        .map(|_| ())
+        .map_err(|err| EngineError::Validation(format!("Failed to set '{key}': {err:?}")))
 }
 
 fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError> {
@@ -271,34 +288,4 @@ fn optional_token_pools(
             "Invalid token_pools value at CSV line {line}: {message}"
         ))
     })
-}
-
-#[derive(Serialize)]
-struct GameSnapshot {
-    zones: Vec<ZoneView>,
-}
-
-#[derive(Serialize)]
-struct ZoneView {
-    id: String,
-    battlefield: bool,
-    cards: Vec<CardView>,
-    token_pools: Vec<TokenPoolView>,
-}
-
-#[derive(Serialize)]
-struct CardView {
-    id: String,
-    name: String,
-    card_type: String,
-}
-
-#[derive(Serialize)]
-struct TokenPoolView {
-    id: String,
-    label: String,
-    token: String,
-    background: Option<String>,
-    count: u32,
-    active: bool,
 }
