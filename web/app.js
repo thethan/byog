@@ -22,10 +22,6 @@ const zoneClassMap = {
 
 let game;
 
-function parseState(json) {
-  return JSON.parse(json);
-}
-
 function renderState(state) {
   zonesEl.innerHTML = "";
 
@@ -35,7 +31,14 @@ function renderState(state) {
 
     const heading = document.createElement("div");
     heading.className = "mb-2 flex items-center justify-between";
-    heading.innerHTML = `<h2 class=\"font-semibold\">${zone.id}</h2><span class=\"text-xs text-slate-400\">${zone.cards.length} cards</span>`;
+    const headingTitle = document.createElement("h2");
+    headingTitle.className = "font-semibold";
+    headingTitle.textContent = zone.id;
+    const headingCount = document.createElement("span");
+    headingCount.className = "text-xs text-slate-400";
+    headingCount.textContent = `${zone.cards.length} cards`;
+    heading.appendChild(headingTitle);
+    heading.appendChild(headingCount);
     panel.appendChild(heading);
 
     const cards = document.createElement("ul");
@@ -49,7 +52,14 @@ function renderState(state) {
       for (const card of zone.cards) {
         const item = document.createElement("li");
         item.className = "rounded border border-slate-700 bg-slate-950 px-2 py-1";
-        item.innerHTML = `<div class=\"text-sm font-medium\">${card.name}</div><div class=\"text-xs text-slate-400\">${card.card_type} · ${card.id}</div>`;
+        const title = document.createElement("div");
+        title.className = "text-sm font-medium";
+        title.textContent = card.name;
+        const meta = document.createElement("div");
+        meta.className = "text-xs text-slate-400";
+        meta.textContent = `${card.card_type} · ${card.id}`;
+        item.appendChild(title);
+        item.appendChild(meta);
         cards.appendChild(item);
       }
     }
@@ -73,7 +83,7 @@ function renderState(state) {
 
 async function runAction(action, message) {
   try {
-    const next = parseState(action());
+    const next = action();
     statusEl.textContent = message;
     renderState(next);
   } catch (error) {
@@ -85,7 +95,7 @@ async function boot() {
   try {
     await init();
     game = new WasmGame();
-    const state = parseState(game.state_json());
+    const state = game.state_json();
     renderState(state);
     statusEl.textContent = "Ready";
   } catch (error) {
