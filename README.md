@@ -126,6 +126,9 @@ The repository now includes a playable browser app with a Tailwind layout for ev
 - EnchantmentList
 - CreatureList
 
+The WebAssembly interface returns game-state snapshots as Protocol Buffer bytes,
+and the frontend decodes those payloads before rendering.
+
 ### Build Rust to WebAssembly
 
 ```bash
