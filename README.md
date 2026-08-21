@@ -57,7 +57,38 @@ The demo:
 - adds a token to the `Hand` pool at runtime
 - appends move rows to the move log CSV
 
-## Token pools
+## Dice helpers
+
+The library also exposes dice roll helpers:
+
+- `roll_die(sides)` for a single die
+- `roll_dice(count, sides)` for individual results
+- `roll_dice_total(count, sides)` for a summed total
+
+### Icon-based dice sides
+
+When a die side is represented by an icon, the icon value must be a valid
+[Font Awesome](https://fontawesome.com/) class name.
+
+**Accepted formats**
+
+| Form | Example |
+|------|---------|
+| Single token | `fa-skull` |
+| Single token | `fa-dice-d20` |
+| Style + icon | `fa-solid fa-skull` |
+| Style + icon | `fa-regular fa-star` |
+| Style + icon | `fa-brands fa-github` |
+
+Rules:
+- Must start with `fa-` followed by one or more lowercase letters, digits, or hyphens.
+- Optional style prefix must be one of `fa-solid`, `fa-regular`, or `fa-brands`.
+- No uppercase letters, underscores, or other icon systems (e.g. `mdi-*`).
+
+**Invalid examples**: `""`, `Fa-Skull`, `mdi-sword-cross`, `fa_heart`, `fa-duotone fa-skull`
+
+Use `validate_fa_icon(icon)` to check an icon string; invalid values return
+`EngineError::Validation`.
 
 Token pools can belong to zones or to individual cards.
 
