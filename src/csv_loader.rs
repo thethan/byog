@@ -66,6 +66,7 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
                 headers.get("token_pools").copied(),
                 line_idx + 2,
             )?,
+            starting_pile: optional_value(&record, headers.get("starting_pile").copied()),
         });
     }
 

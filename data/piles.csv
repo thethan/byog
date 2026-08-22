@@ -1,0 +1,11 @@
+id,name,zone_id,x,y,associated_piles
+commander_pile,Commander,command_zone,0,0,
+main_stack,Main Stack,stack_zone,8,4,deck,discard
+deck,Deck,deck_zone,0,4,main_stack,discard
+lands,Lands,battlefield,0,8,
+artifacts,Artifacts,battlefield,8,8,
+enchantments,Enchantments,battlefield,16,8,
+creatures,Creatures,battlefield,24,8,
+discard,Discard,discard_zone,16,4,deck,main_stack
+exile,Exile,exile_zone,24,4,
+hand,Hand,hand,0,28,

@@ -75,19 +75,19 @@ impl CardEngine {
         let card = self.state.card_by_id(card_id)?.clone();
         if !matches!(card.card_type, CardType::Land) {
             return Err(EngineError::Validation(format!(
-                "Card '{card_id}' is not a land and cannot be played to LandPile"
+                "Card '{card_id}' is not a land and cannot be played to Lands"
             )));
         }
 
-        self.state.move_card(Zone::Hand, Zone::LandPile, card_id)?;
+        self.state.move_card(Zone::Hand, Zone::Lands, card_id)?;
         self.logger
-            .append_move("play_land", &card, Zone::Hand, Zone::LandPile, None)
+            .append_move("play_land", &card, Zone::Hand, Zone::Lands, None)
     }
 
     pub fn discard(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         if !matches!(
             from,
-            Zone::Hand | Zone::ArtifactList | Zone::EnchantmentList | Zone::CreatureList
+            Zone::Hand | Zone::Artifacts | Zone::Enchantments | Zone::Creatures
         ) {
             return Err(EngineError::Validation(format!(
                 "Discard is only allowed from Hand or in-play piles, got {from}"
@@ -110,9 +110,9 @@ impl CardEngine {
     pub fn cast_to_battlefield(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
         let to_zone = match card.card_type {
-            CardType::Artifact => Zone::ArtifactList,
-            CardType::Enchantment => Zone::EnchantmentList,
-            CardType::Creature => Zone::CreatureList,
+            CardType::Artifact => Zone::Artifacts,
+            CardType::Enchantment => Zone::Enchantments,
+            CardType::Creature => Zone::Creatures,
             _ => {
                 return Err(EngineError::Validation(format!(
                     "Card '{card_id}' cannot be cast to battlefield typed piles"
@@ -237,6 +237,7 @@ mod tests {
             is_commander,
             is_partner,
             token_pools: Vec::new(),
+            starting_pile: None,
         }
     }
 
@@ -379,6 +380,7 @@ mod tests {
                     )
                     .expect("card token pool"),
                 ],
+                starting_pile: None,
             }],
             Some(&log_path),
         );

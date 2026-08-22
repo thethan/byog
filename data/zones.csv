@@ -1,0 +1,8 @@
+id,name,color,grid
+command_zone,Command Zone,violet,"0,0.8x4"
+deck_zone,Deck Zone,sky,"0,4.8x4"
+stack_zone,Stack,indigo,"8,4.8x4"
+discard_zone,Discard,rose,"16,4.8x4"
+exile_zone,Exile,orange,"24,4.8x4"
+battlefield,Battlefield,emerald,"0,8.32x16"
+hand,Hand,cyan,"0,28.32x4"
