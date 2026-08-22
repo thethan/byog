@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::card::{Card, CardType};
+use crate::card::Card;
 use crate::move_logger::{MoveLogEntry, MoveLogger};
 use crate::token_pool::TokenPool;
 use crate::zones::{GameState, Zone};
@@ -79,15 +79,6 @@ impl CardEngine {
     }
 
     pub fn discard(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
-        if !matches!(
-            from,
-            Zone::Hand | Zone::Artifacts | Zone::Enchantments | Zone::Creatures
-        ) {
-            return Err(EngineError::Validation(format!(
-                "Discard is only allowed from Hand or in-play piles, got {from}"
-            )));
-        }
-
         self.state.move_card(from, Zone::Discard, card_id)?;
         let card = self.state.card_by_id(card_id)?;
         self.logger
@@ -103,20 +94,9 @@ impl CardEngine {
 
     pub fn cast_to_battlefield(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
-        let to_zone = match card.card_type {
-            CardType::Artifact => Zone::Artifacts,
-            CardType::Enchantment => Zone::Enchantments,
-            CardType::Creature => Zone::Creatures,
-            _ => {
-                return Err(EngineError::Validation(format!(
-                    "Card '{card_id}' cannot be cast to battlefield typed piles"
-                )));
-            }
-        };
-
-        self.state.move_card(Zone::Hand, to_zone, card_id)?;
+        self.state.move_card(Zone::Hand, Zone::Battlefield, card_id)?;
         self.logger
-            .append_move("cast_to_battlefield", &card, Zone::Hand, to_zone, None)
+            .append_move("cast_to_battlefield", &card, Zone::Hand, Zone::Battlefield, None)
     }
 
     pub fn peek_main_stack(&self, count: usize) -> Vec<String> {

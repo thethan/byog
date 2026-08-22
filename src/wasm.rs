@@ -27,6 +27,7 @@ fn pile_id_to_zone(pile_id: &str) -> Option<Zone> {
         "artifacts" => Some(Zone::Artifacts),
         "enchantments" => Some(Zone::Enchantments),
         "creatures" => Some(Zone::Creatures),
+        "battlefield" => Some(Zone::Battlefield),
         _ => None,
     }
 }

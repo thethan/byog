@@ -16,6 +16,7 @@ pub enum Zone {
     Artifacts,
     Enchantments,
     Creatures,
+    Battlefield,
 }
 
 impl Zone {
@@ -30,10 +31,14 @@ impl Zone {
         Zone::Artifacts,
         Zone::Enchantments,
         Zone::Creatures,
+        Zone::Battlefield,
     ];
 
     pub fn is_battlefield(self) -> bool {
-        matches!(self, Zone::Artifacts | Zone::Enchantments | Zone::Creatures)
+        matches!(
+            self,
+            Zone::Artifacts | Zone::Enchantments | Zone::Creatures | Zone::Battlefield
+        )
     }
 }
 
@@ -50,6 +55,7 @@ impl std::fmt::Display for Zone {
             Zone::Artifacts => write!(f, "Artifacts"),
             Zone::Enchantments => write!(f, "Enchantments"),
             Zone::Creatures => write!(f, "Creatures"),
+            Zone::Battlefield => write!(f, "Battlefield"),
         }
     }
 }
