@@ -73,12 +73,6 @@ impl CardEngine {
 
     pub fn play_land(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
-        if !matches!(card.card_type, CardType::Land) {
-            return Err(EngineError::Validation(format!(
-                "Card '{card_id}' is not a land and cannot be played to Lands"
-            )));
-        }
-
         self.state.move_card(Zone::Hand, Zone::Lands, card_id)?;
         self.logger
             .append_move("play_land", &card, Zone::Hand, Zone::Lands, None)
@@ -278,8 +272,7 @@ mod tests {
         engine.draw().expect("draw 2");
 
         engine.play_land("land").expect("play land");
-        let invalid = engine.play_land("creature");
-        assert!(invalid.is_err());
+        engine.play_land("creature").expect("play non-land to lands");
 
         fs::remove_file(log_path).ok();
     }
