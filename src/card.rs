@@ -51,4 +51,5 @@ pub struct Card {
     pub is_commander: bool,
     pub is_partner: bool,
     pub token_pools: Vec<TokenPool>,
+    pub starting_pile: Option<String>,
 }

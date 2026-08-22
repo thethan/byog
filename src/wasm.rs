@@ -5,14 +5,38 @@ use wasm_bindgen::prelude::*;
 
 use crate::card::{Card, CardType};
 use crate::engine::{CardEngine, EngineError};
+use crate::pile::{Pile, parse_piles_csv};
 use crate::token_pool::TokenPool;
+use crate::zone_layout::{ZoneLayout, parse_zones_csv};
 use crate::zones::Zone;
 
 const DEFAULT_CARDS_CSV: &str = include_str!("../data/cards.csv");
+const DEFAULT_PILES_CSV: &str = include_str!("../data/piles.csv");
+const DEFAULT_ZONES_CSV: &str = include_str!("../data/zones.csv");
+
+/// Maps a pile id string to the corresponding `Zone` variant.
+fn pile_id_to_zone(pile_id: &str) -> Option<Zone> {
+    match pile_id {
+        "commander_pile" => Some(Zone::CommanderPile),
+        "main_stack" => Some(Zone::MainStack),
+        "hand" => Some(Zone::Hand),
+        "lands" => Some(Zone::Lands),
+        "deck" => Some(Zone::Deck),
+        "discard" => Some(Zone::Discard),
+        "exile" => Some(Zone::Exile),
+        "artifacts" => Some(Zone::Artifacts),
+        "enchantments" => Some(Zone::Enchantments),
+        "creatures" => Some(Zone::Creatures),
+        "battlefield" => Some(Zone::Battlefield),
+        _ => None,
+    }
+}
 
 #[wasm_bindgen]
 pub struct WasmGame {
     engine: CardEngine,
+    piles: Vec<Pile>,
+    zone_layouts: Vec<ZoneLayout>,
 }
 
 #[wasm_bindgen]
@@ -25,14 +49,30 @@ impl WasmGame {
             return Err(JsValue::from_str("No cards found in embedded CSV"));
         }
 
-        let mut commander_ids = Vec::new();
-        let mut main_stack = Vec::new();
+        let piles = parse_piles_csv(DEFAULT_PILES_CSV)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+
+        let zone_layouts = parse_zones_csv(DEFAULT_ZONES_CSV)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+
+        // Group cards by starting_pile; fall back to main_stack for non-commanders,
+        // commander_pile for commanders with no starting_pile.
+        let mut zone_cards: std::collections::HashMap<Zone, Vec<String>> =
+            Zone::ALL.iter().map(|z| (*z, Vec::new())).collect();
+
         for card in &cards {
-            if card.is_commander && commander_ids.len() < 2 {
-                commander_ids.push(card.id.clone());
-            } else {
-                main_stack.push(card.id.clone());
-            }
+            let target_zone = card
+                .starting_pile
+                .as_deref()
+                .and_then(pile_id_to_zone)
+                .unwrap_or_else(|| {
+                    if card.is_commander {
+                        Zone::CommanderPile
+                    } else {
+                        Zone::MainStack
+                    }
+                });
+            zone_cards.entry(target_zone).or_default().push(card.id.clone());
         }
 
         let mut engine = CardEngine::new(cards, None);
@@ -51,24 +91,57 @@ impl WasmGame {
             .set_zone_token_pools(Zone::Hand, vec![energy_pool])
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
 
-        if !commander_ids.is_empty() {
-            engine
-                .state
-                .set_zone_cards(Zone::CommanderPile, commander_ids)
-                .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        for (zone, ids) in zone_cards {
+            if !ids.is_empty() {
+                engine
+                    .state
+                    .set_zone_cards(zone, ids)
+                    .map_err(|err| JsValue::from_str(&err.to_string()))?;
+            }
         }
 
-        engine
-            .state
-            .set_zone_cards(Zone::MainStack, main_stack)
-            .map_err(|err| JsValue::from_str(&err.to_string()))?;
-
-        Ok(Self { engine })
+        Ok(Self { engine, piles, zone_layouts })
     }
 
     pub fn state_proto(&self) -> Result<Vec<u8>, JsValue> {
         self.snapshot_proto()
             .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    pub fn board_layout_proto(&self) -> Result<Vec<u8>, JsValue> {
+        let zones = self
+            .zone_layouts
+            .iter()
+            .map(|z| ZoneLayoutProto {
+                id: z.id.clone(),
+                name: z.name.clone(),
+                color: z.color.clone(),
+                x: z.x as u32,
+                y: z.y as u32,
+                width: z.width as u32,
+                height: z.height as u32,
+            })
+            .collect();
+
+        let piles = self
+            .piles
+            .iter()
+            .map(|p| PileViewProto {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                zone_id: p.zone_id.clone(),
+                x: p.x as u32,
+                y: p.y as u32,
+                associated_piles: p.associated_piles.clone(),
+            })
+            .collect();
+
+        let layout = BoardLayoutProto { zones, piles };
+        let mut bytes = Vec::new();
+        layout.encode(&mut bytes).map_err(|err| {
+            JsValue::from_str(&format!("Failed to encode board layout protobuf: {err}"))
+        })?;
+        Ok(bytes)
     }
 
     pub fn draw(&mut self) -> Result<Vec<u8>, JsValue> {
@@ -168,6 +241,8 @@ impl WasmGame {
     }
 }
 
+// ── Protobuf message definitions ─────────────────────────────────────────────
+
 #[derive(Clone, PartialEq, Message)]
 struct GameStateSnapshotProto {
     #[prost(message, repeated, tag = "1")]
@@ -211,6 +286,50 @@ struct TokenPoolViewProto {
     #[prost(bool, tag = "6")]
     active: bool,
 }
+
+#[derive(Clone, PartialEq, Message)]
+struct ZoneLayoutProto {
+    #[prost(string, tag = "1")]
+    id: String,
+    #[prost(string, tag = "2")]
+    name: String,
+    #[prost(string, tag = "3")]
+    color: String,
+    #[prost(uint32, tag = "4")]
+    x: u32,
+    #[prost(uint32, tag = "5")]
+    y: u32,
+    #[prost(uint32, tag = "6")]
+    width: u32,
+    #[prost(uint32, tag = "7")]
+    height: u32,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct PileViewProto {
+    #[prost(string, tag = "1")]
+    id: String,
+    #[prost(string, tag = "2")]
+    name: String,
+    #[prost(string, tag = "3")]
+    zone_id: String,
+    #[prost(uint32, tag = "4")]
+    x: u32,
+    #[prost(uint32, tag = "5")]
+    y: u32,
+    #[prost(string, repeated, tag = "6")]
+    associated_piles: Vec<String>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct BoardLayoutProto {
+    #[prost(message, repeated, tag = "1")]
+    zones: Vec<ZoneLayoutProto>,
+    #[prost(message, repeated, tag = "2")]
+    piles: Vec<PileViewProto>,
+}
+
+// ── Embedded CSV helpers ──────────────────────────────────────────────────────
 
 fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError> {
     let mut reader = csv::Reader::from_reader(Cursor::new(raw_csv.as_bytes()));
@@ -257,6 +376,7 @@ fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError>
             is_commander: optional_bool(&record, headers.get("is_commander").copied()),
             is_partner: optional_bool(&record, headers.get("is_partner").copied()),
             token_pools: optional_token_pools(&record, headers.get("token_pools").copied(), line_idx + 2)?,
+            starting_pile: optional_value(&record, headers.get("starting_pile").copied()),
         });
     }
 

@@ -1,7 +1,7 @@
-id,name,card_type,mana_cost,colors,oracle_text,power,toughness,is_commander,is_partner,token_pools
-cmdr1,Ardenn Intrepid Archaeologist,Creature,3W,W,At beginning of combat on your turn attach any number of Auras and Equipment you control to target permanent or player.,2,2,true,true,
-cmdr2,Rograkh Son of Rohgahh,Creature,R,R,First strike menace trample.,0,1,true,true,
-land1,Plains,Land,,,Basic Land — Plains,,,false,false,
-art1,Sol Ring,Artifact,1,,{T}: Add {C}{C}.,,,false,false,"id=charge|label=Charge|token=fa-bolt|background=amber|starting=1|min=0|max=3|active=true"
-cre1,Silvercoat Lion,Creature,1W,W,,2,2,false,false,
-ench1,Pacifism,Enchantment,1W,W,Enchant creature. Enchanted creature can't attack or block.,,,false,false,
+id,name,card_type,mana_cost,colors,oracle_text,power,toughness,is_commander,is_partner,token_pools,starting_pile
+cmdr1,Ardenn Intrepid Archaeologist,Creature,3W,W,At beginning of combat on your turn attach any number of Auras and Equipment you control to target permanent or player.,2,2,true,true,,commander_pile
+cmdr2,Rograkh Son of Rohgahh,Creature,R,R,First strike menace trample.,0,1,true,true,,commander_pile
+land1,Plains,Land,,,Basic Land — Plains,,,false,false,,deck
+art1,Sol Ring,Artifact,1,,{T}: Add {C}{C}.,,,false,false,"id=charge|label=Charge|token=fa-bolt|background=amber|starting=1|min=0|max=3|active=true",deck
+cre1,Silvercoat Lion,Creature,1W,W,,2,2,false,false,,deck
+ench1,Pacifism,Enchantment,1W,W,Enchant creature. Enchanted creature can't attack or block.,,,false,false,,deck

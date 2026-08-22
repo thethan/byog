@@ -9,13 +9,14 @@ pub enum Zone {
     MainStack,
     CommanderPile,
     Hand,
-    LandPile,
+    Lands,
     Deck,
     Discard,
     Exile,
-    ArtifactList,
-    EnchantmentList,
-    CreatureList,
+    Artifacts,
+    Enchantments,
+    Creatures,
+    Battlefield,
 }
 
 impl Zone {
@@ -23,19 +24,20 @@ impl Zone {
         Zone::MainStack,
         Zone::CommanderPile,
         Zone::Hand,
-        Zone::LandPile,
+        Zone::Lands,
         Zone::Deck,
         Zone::Discard,
         Zone::Exile,
-        Zone::ArtifactList,
-        Zone::EnchantmentList,
-        Zone::CreatureList,
+        Zone::Artifacts,
+        Zone::Enchantments,
+        Zone::Creatures,
+        Zone::Battlefield,
     ];
 
     pub fn is_battlefield(self) -> bool {
         matches!(
             self,
-            Zone::ArtifactList | Zone::EnchantmentList | Zone::CreatureList
+            Zone::Artifacts | Zone::Enchantments | Zone::Creatures | Zone::Battlefield
         )
     }
 }
@@ -46,13 +48,14 @@ impl std::fmt::Display for Zone {
             Zone::MainStack => write!(f, "MainStack"),
             Zone::CommanderPile => write!(f, "CommanderPile"),
             Zone::Hand => write!(f, "Hand"),
-            Zone::LandPile => write!(f, "LandPile"),
+            Zone::Lands => write!(f, "Lands"),
             Zone::Deck => write!(f, "Deck"),
             Zone::Discard => write!(f, "Discard"),
             Zone::Exile => write!(f, "Exile"),
-            Zone::ArtifactList => write!(f, "ArtifactList"),
-            Zone::EnchantmentList => write!(f, "EnchantmentList"),
-            Zone::CreatureList => write!(f, "CreatureList"),
+            Zone::Artifacts => write!(f, "Artifacts"),
+            Zone::Enchantments => write!(f, "Enchantments"),
+            Zone::Creatures => write!(f, "Creatures"),
+            Zone::Battlefield => write!(f, "Battlefield"),
         }
     }
 }

@@ -3,24 +3,89 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BYOG Zones</title>
+    <title>BYOG – Game Board</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* 32×32 grid board */
+      #board {
+        display: grid;
+        grid-template-columns: repeat(32, minmax(0, 1fr));
+        grid-template-rows: repeat(32, minmax(0, 1fr));
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        position: relative;
+      }
+
+      /* Zone region overlays */
+      .zone-region {
+        pointer-events: none;
+        border-radius: 0.375rem;
+        opacity: 0.18;
+        position: absolute;
+        inset: 0;
+      }
+
+      /* Pile panels sit on top of zone regions */
+      .pile-panel {
+        z-index: 10;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      /* ── Portrait phone: stack piles vertically ── */
+      @media (max-width: 480px) and (orientation: portrait) {
+        #board {
+          display: flex;
+          flex-direction: column;
+          aspect-ratio: unset;
+          gap: 0.5rem;
+        }
+        .zone-region { display: none; }
+        .pile-panel {
+          grid-column: unset !important;
+          grid-row: unset !important;
+        }
+      }
+
+      /* ── Landscape phone: associated piles in rows ── */
+      @media (orientation: landscape) and (max-height: 500px) {
+        #board {
+          display: flex;
+          flex-wrap: wrap;
+          aspect-ratio: unset;
+          gap: 0.5rem;
+        }
+        .zone-region { display: none; }
+        .pile-panel {
+          grid-column: unset !important;
+          grid-row: unset !important;
+          flex: 1 1 calc(50% - 0.5rem);
+        }
+        .pile-group {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          flex: 1 1 100%;
+        }
+      }
+    </style>
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100">
-    <main class="mx-auto max-w-7xl p-4 md:p-6">
-      <header class="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 class="text-2xl font-bold">BYOG Web App</h1>
+    <main class="mx-auto max-w-screen-2xl p-3 md:p-5">
+      <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-2xl font-bold">BYOG</h1>
         <div class="flex flex-wrap gap-2">
-          <button id="draw-btn" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold hover:bg-indigo-500">Draw</button>
-          <button id="auto-play-btn" class="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500">Auto Play First Hand Card</button>
-          <button id="discard-btn" class="rounded bg-rose-600 px-3 py-2 text-sm font-semibold hover:bg-rose-500">Discard First Hand Card</button>
-          <button id="energy-btn" class="rounded bg-amber-600 px-3 py-2 text-sm font-semibold hover:bg-amber-500">+1 Hand Energy</button>
+          <button id="draw-btn" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40">Draw</button>
+          <button id="auto-play-btn" class="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40">Auto Play</button>
+          <button id="discard-btn" class="rounded bg-rose-600 px-3 py-2 text-sm font-semibold hover:bg-rose-500 disabled:opacity-40">Discard</button>
+          <button id="energy-btn" class="rounded bg-amber-600 px-3 py-2 text-sm font-semibold hover:bg-amber-500 disabled:opacity-40">+1 Energy</button>
         </div>
       </header>
 
-      <p id="status" class="mb-4 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300">Loading...</p>
+      <p id="status" class="mb-3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300">Loading…</p>
 
-      <section id="zones" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"></section>
+      <!-- 32×32 game board -->
+      <div id="board" class="rounded-xl border border-slate-700 bg-slate-900 p-1"></div>
     </main>
 
     <script type="module" src="./app.js"></script>

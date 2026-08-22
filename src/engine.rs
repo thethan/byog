@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::card::{Card, CardType};
+use crate::card::Card;
 use crate::move_logger::{MoveLogEntry, MoveLogger};
 use crate::token_pool::TokenPool;
 use crate::zones::{GameState, Zone};
@@ -73,27 +73,12 @@ impl CardEngine {
 
     pub fn play_land(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
-        if !matches!(card.card_type, CardType::Land) {
-            return Err(EngineError::Validation(format!(
-                "Card '{card_id}' is not a land and cannot be played to LandPile"
-            )));
-        }
-
-        self.state.move_card(Zone::Hand, Zone::LandPile, card_id)?;
+        self.state.move_card(Zone::Hand, Zone::Lands, card_id)?;
         self.logger
-            .append_move("play_land", &card, Zone::Hand, Zone::LandPile, None)
+            .append_move("play_land", &card, Zone::Hand, Zone::Lands, None)
     }
 
     pub fn discard(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
-        if !matches!(
-            from,
-            Zone::Hand | Zone::ArtifactList | Zone::EnchantmentList | Zone::CreatureList
-        ) {
-            return Err(EngineError::Validation(format!(
-                "Discard is only allowed from Hand or in-play piles, got {from}"
-            )));
-        }
-
         self.state.move_card(from, Zone::Discard, card_id)?;
         let card = self.state.card_by_id(card_id)?;
         self.logger
@@ -109,20 +94,9 @@ impl CardEngine {
 
     pub fn cast_to_battlefield(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
-        let to_zone = match card.card_type {
-            CardType::Artifact => Zone::ArtifactList,
-            CardType::Enchantment => Zone::EnchantmentList,
-            CardType::Creature => Zone::CreatureList,
-            _ => {
-                return Err(EngineError::Validation(format!(
-                    "Card '{card_id}' cannot be cast to battlefield typed piles"
-                )));
-            }
-        };
-
-        self.state.move_card(Zone::Hand, to_zone, card_id)?;
+        self.state.move_card(Zone::Hand, Zone::Battlefield, card_id)?;
         self.logger
-            .append_move("cast_to_battlefield", &card, Zone::Hand, to_zone, None)
+            .append_move("cast_to_battlefield", &card, Zone::Hand, Zone::Battlefield, None)
     }
 
     pub fn peek_main_stack(&self, count: usize) -> Vec<String> {
@@ -237,6 +211,7 @@ mod tests {
             is_commander,
             is_partner,
             token_pools: Vec::new(),
+            starting_pile: None,
         }
     }
 
@@ -277,8 +252,7 @@ mod tests {
         engine.draw().expect("draw 2");
 
         engine.play_land("land").expect("play land");
-        let invalid = engine.play_land("creature");
-        assert!(invalid.is_err());
+        engine.play_land("creature").expect("play non-land to lands");
 
         fs::remove_file(log_path).ok();
     }
@@ -379,6 +353,7 @@ mod tests {
                     )
                     .expect("card token pool"),
                 ],
+                starting_pile: None,
             }],
             Some(&log_path),
         );
