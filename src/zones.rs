@@ -340,7 +340,7 @@ impl GameState {
             2 => {
                 let first = self.card_by_id(&card_ids[0])?;
                 let second = self.card_by_id(&card_ids[1])?;
-                if first.is_partner && second.is_partner {
+                if first.is_partner() && second.is_partner() {
                     Ok(())
                 } else {
                     Err(EngineError::Validation(

@@ -39,7 +39,7 @@ fn run_demo() -> Result<(), EngineError> {
     let mut main_stack = Vec::new();
 
     for card in cards {
-        if card.is_commander && commander_ids.len() < 2 {
+        if card.is_commander() && commander_ids.len() < 2 {
             commander_ids.push(card.id.clone());
         } else {
             main_stack.push(card.id.clone());

@@ -3,7 +3,7 @@ use std::io::Cursor;
 use prost::Message;
 use wasm_bindgen::prelude::*;
 
-use crate::card::{Card, CardType};
+use crate::card::{Card, CardType, RoleStatus};
 use crate::engine::{CardEngine, EngineError};
 use crate::pile::{Pile, parse_piles_csv};
 use crate::token_pool::TokenPool;
@@ -66,7 +66,7 @@ impl WasmGame {
                 .as_deref()
                 .and_then(pile_id_to_zone)
                 .unwrap_or_else(|| {
-                    if card.is_commander {
+                    if card.is_commander() {
                         Zone::CommanderPile
                     } else {
                         Zone::MainStack
@@ -373,8 +373,10 @@ fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError>
             oracle_text: optional_value(&record, headers.get("oracle_text").copied()),
             power: optional_value(&record, headers.get("power").copied()),
             toughness: optional_value(&record, headers.get("toughness").copied()),
-            is_commander: optional_bool(&record, headers.get("is_commander").copied()),
-            is_partner: optional_bool(&record, headers.get("is_partner").copied()),
+            role: RoleStatus::from_bools(
+                optional_bool(&record, headers.get("is_commander").copied()),
+                optional_bool(&record, headers.get("is_partner").copied()),
+            ),
             token_pools: optional_token_pools(&record, headers.get("token_pools").copied(), line_idx + 2)?,
             starting_pile: optional_value(&record, headers.get("starting_pile").copied()),
         });
