@@ -186,7 +186,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use crate::card::{Card, CardType};
+    use crate::card::{Card, CardType, RoleStatus};
     use crate::token_pool::TokenPool;
     use crate::zones::Zone;
 
@@ -208,8 +208,7 @@ mod tests {
             oracle_text: None,
             power: None,
             toughness: None,
-            is_commander,
-            is_partner,
+            role: RoleStatus::from_bools(is_commander, is_partner),
             token_pools: Vec::new(),
             starting_pile: None,
         }
@@ -338,8 +337,7 @@ mod tests {
                 oracle_text: None,
                 power: None,
                 toughness: None,
-                is_commander: false,
-                is_partner: false,
+                role: RoleStatus::None,
                 token_pools: vec![
                     TokenPool::configured(
                         "charge",
