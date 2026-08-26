@@ -151,3 +151,77 @@ mod tests {
         assert!(cards[1].token_pools.is_empty());
     }
 }
+
+
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct CardCsvRow {
+    pub game_id: String,
+    pub id: String,
+    pub name: String,
+    pub card_type_id: String,
+
+    #[serde(default)]
+    pub description: Option<String>,
+
+    #[serde(default)]
+    pub cost: Option<String>,
+
+    /// Artwork displayed within the generated card layout.
+    #[serde(default)]
+    pub image: Option<String>,
+
+    /// Overrides the inherited card-type background.
+    #[serde(default)]
+    pub background_image: Option<String>,
+
+    /// Complete pre-rendered card. Hides generated content.
+    #[serde(default)]
+    pub full_image: Option<String>,
+
+    #[serde(default)]
+    pub background_color: Option<String>,
+
+    #[serde(default)]
+    pub icon: Option<String>,
+
+    #[serde(default)]
+    pub back_logo: Option<String>,
+}
+
+impl CardCsvRow {
+    pub fn into_card(self) -> Result<Card, String> {
+        let visual = match normalize_optional(self.full_image) {
+            Some(image) => CardVisual::FullImage { image },
+
+            None => CardVisual::Generated {
+                image: normalize_optional(self.image),
+                background_image: normalize_optional(
+                    self.background_image,
+                ),
+                background_color: normalize_optional(
+                    self.background_color,
+                ),
+                icon: normalize_optional(self.icon),
+            },
+        };
+
+        Ok(Card {
+            game_id: self.game_id,
+            id: self.id,
+            name: self.name,
+            card_type_id: self.card_type_id,
+            description: normalize_optional(self.description),
+            cost: parse_card_cost(self.cost.as_deref())?,
+            visual,
+            back_logo: normalize_optional(self.back_logo),
+        })
+    }
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
