@@ -57,6 +57,14 @@ The demo:
 - adds a token to the `Hand` pool at runtime
 - appends move rows to the move log CSV
 
+## Dice helpers
+
+The library also exposes dice roll helpers:
+
+- `roll_die(sides)` for a single die
+- `roll_dice(count, sides)` for individual results
+- `roll_dice_total(count, sides)` for a summed total
+
 ## Token pools
 
 Token pools can belong to zones or to individual cards.
