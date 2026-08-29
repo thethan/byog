@@ -1,3 +1,4 @@
 /target
 
 data/moves_log.csv
+**/target/**
