@@ -1,0 +1,9 @@
+[package]
+name = "decks"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cards = { path = "../cards", version = "0.1.0" }

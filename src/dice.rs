@@ -1,4 +1,3 @@
-use rand::RngExt;
 
 use crate::engine::EngineError;
 
@@ -75,14 +74,15 @@ fn is_fa_style_prefix(s: &str) -> bool {
 
 pub fn roll_die(sides: u32) -> Result<u32, EngineError> {
     validate_roll(sides)?;
-    Ok(rand::rng().random_range(1..=sides))
+    let result = rand::random_range(1..=sides);
+
+    Ok(result)
 }
 
 pub fn roll_dice(count: usize, sides: u32) -> Result<Vec<u32>, EngineError> {
     validate_rolls(count, sides)?;
-    let mut rng = rand::rng();
 
-    Ok((0..count).map(|_| rng.random_range(1..=sides)).collect())
+    Ok((0..count).map(|_| rand::random_range(1..=sides)).collect())
 }
 
 pub fn roll_dice_total(count: usize, sides: u32) -> Result<u32, EngineError> {

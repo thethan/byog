@@ -1,17 +1,25 @@
-use std::collections::HashMap;
-use std::env;
-use std::path::{Path, PathBuf};
-
 use crate::card::{Card, CardType};
 use crate::engine::EngineError;
 use crate::token_pool::TokenPool;
+use std::collections::HashMap;
+use std::env;
+use std::iter::FromIterator;
+use std::path::{Path, PathBuf};
+use Pile;
 
 const DEFAULT_CARDS_CSV_PATH: &str = "data/cards.csv";
+const DEFAULT_PILES_CSV_PATH: &str = "data/piles.csv";
 
 pub fn cards_csv_path() -> PathBuf {
     env::var("CARDS_CSV_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_CARDS_CSV_PATH))
+}
+
+pub fn piles_csv_path() -> PathBuf {
+    env::var("PILES_CSV_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_PILES_CSV_PATH))
 }
 
 pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
@@ -59,8 +67,6 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
             oracle_text: optional_value(&record, headers.get("oracle_text").copied()),
             power: optional_value(&record, headers.get("power").copied()),
             toughness: optional_value(&record, headers.get("toughness").copied()),
-            is_commander: optional_bool(&record, headers.get("is_commander").copied()),
-            is_partner: optional_bool(&record, headers.get("is_partner").copied()),
             token_pools: optional_token_pools(
                 &record,
                 headers.get("token_pools").copied(),
@@ -144,8 +150,6 @@ mod tests {
         assert_eq!(cards.len(), 2);
         assert_eq!(cards[0].id, "1");
         assert_eq!(cards[0].name, "Sol Ring");
-        assert!(cards[0].is_commander);
-        assert!(!cards[0].is_partner);
         assert_eq!(cards[0].token_pools[0].token(), "fa-bolt");
         assert_eq!(cards[1].mana_cost, None);
         assert_eq!(cards[1].oracle_text, None);

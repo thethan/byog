@@ -2,9 +2,7 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-
 use chrono::Utc;
-
 use crate::card::Card;
 use crate::engine::EngineError;
 use crate::zones::Zone;

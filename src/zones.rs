@@ -4,6 +4,9 @@ use crate::card::Card;
 use crate::engine::EngineError;
 use crate::token_pool::TokenPool;
 
+
+
+// Todo define these by csv in games. For instance one game may have a "Main Stack" and a "Sideboard" zone, while another game may have a "Main Stack" and a "Command Zone" zone. Another may have library and graveyard zones, while another may have a "Deck" and a "Discard" zone. create more generic zones that then get by ids.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Zone {
     MainStack,
@@ -34,12 +37,6 @@ impl Zone {
         Zone::Battlefield,
     ];
 
-    pub fn is_battlefield(self) -> bool {
-        matches!(
-            self,
-            Zone::Artifacts | Zone::Enchantments | Zone::Creatures | Zone::Battlefield
-        )
-    }
 }
 
 impl std::fmt::Display for Zone {
@@ -107,9 +104,6 @@ impl GameState {
 
     pub fn set_zone_cards(&mut self, zone: Zone, card_ids: Vec<String>) -> Result<(), EngineError> {
         self.ensure_cards_exist(&card_ids)?;
-        if zone == Zone::CommanderPile {
-            self.validate_commander_contents(&card_ids)?;
-        }
 
         self.zones.insert(zone, card_ids);
         Ok(())
@@ -155,7 +149,6 @@ impl GameState {
                 commander_cards.retain(|id| id != card_id);
             }
             commander_cards.push(card_id.to_string());
-            self.validate_commander_contents(&commander_cards)?;
         }
 
         {
@@ -332,27 +325,6 @@ impl GameState {
             )));
         }
         Ok(())
-    }
-
-    fn validate_commander_contents(&self, card_ids: &[String]) -> Result<(), EngineError> {
-        match card_ids.len() {
-            0 | 1 => Ok(()),
-            2 => {
-                let first = self.card_by_id(&card_ids[0])?;
-                let second = self.card_by_id(&card_ids[1])?;
-                if first.is_partner && second.is_partner {
-                    Ok(())
-                } else {
-                    Err(EngineError::Validation(
-                        "CommanderPile can only have 2 cards when both cards are partners"
-                            .to_string(),
-                    ))
-                }
-            }
-            _ => Err(EngineError::Validation(
-                "CommanderPile cannot contain more than 2 cards".to_string(),
-            )),
-        }
     }
 
     pub fn card_by_id(&self, card_id: &str) -> Result<&Card, EngineError> {

@@ -1,3 +1,5 @@
+extern crate chrono;
+
 pub mod card;
 pub mod csv_loader;
 pub mod dice;

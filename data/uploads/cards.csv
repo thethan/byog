@@ -1,0 +1,7 @@
+game_id,id,name,card_type_id,description,cost,image,background_image,background_color,icon,back_logo,full_image
+byog,cmdr1,Ardenn Intrepid Archaeologist,creature,At beginning of combat on your turn attach any number of Auras and Equipment you control to target permanent or player.,"generic:3|white:1",,,,,,
+byog,cmdr2,Rograkh Son of Rohgahh,creature,First strike menace trample.,red:1,,,,,,
+byog,land1,Plains,land,Basic Land — Plains,,,,,,,
+byog,art1,Sol Ring,artifact,{T}: Add {C}{C}.,1,,,,,,
+byog,cre1,Silvercoat Lion,creature,,"generic:1|white:1",,,,,,
+byog,ench1,Pacifism,enchantment,Enchant creature. Enchanted creature can't attack or block.,"generic:1|white:1",,,,,,

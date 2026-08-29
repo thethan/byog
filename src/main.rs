@@ -1,6 +1,6 @@
-use byog::{
-    CardEngine, CardType, EngineError, TokenPool, Zone, cards_csv_path, load_cards, moves_log_path,
-};
+extern crate byog;
+
+use byog::{cards_csv_path, load_cards, moves_log_path, CardEngine, EngineError, TokenPool, Zone};
 
 fn main() {
     if let Err(err) = run_demo() {
@@ -35,21 +35,12 @@ fn run_demo() -> Result<(), EngineError> {
     .map_err(EngineError::Validation)?;
     engine.set_zone_token_pools(Zone::Hand, vec![energy_pool])?;
 
-    let mut commander_ids = Vec::new();
     let mut main_stack = Vec::new();
 
     for card in cards {
-        if card.is_commander && commander_ids.len() < 2 {
-            commander_ids.push(card.id.clone());
-        } else {
-            main_stack.push(card.id.clone());
-        }
-    }
 
-    if !commander_ids.is_empty() {
-        engine
-            .state
-            .set_zone_cards(Zone::CommanderPile, commander_ids)?;
+            main_stack.push(card.id.clone());
+
     }
 
     engine.state.set_zone_cards(Zone::MainStack, main_stack)?;
@@ -64,17 +55,10 @@ fn run_demo() -> Result<(), EngineError> {
         .ok()
         .map(|card| card.card_type.clone())
     {
-        match card_type {
-            CardType::Land => {
-                engine.play_land(&draw_entry.card_id)?;
-            }
-            CardType::Artifact | CardType::Enchantment | CardType::Creature => {
-                engine.cast_to_battlefield(&draw_entry.card_id)?;
-            }
-            _ => {
-                engine.discard(Zone::Hand, &draw_entry.card_id)?;
-            }
-        }
+        println!(
+            "Drew card: {} (type: {})",
+            draw_entry.card_id, card_type
+        );
     }
 
     if !engine.state.zone_cards(Zone::MainStack).is_empty() {

@@ -15,10 +15,6 @@ pub fn piles_csv_path() -> PathBuf {
 pub struct Pile {
     pub id: String,
     pub name: String,
-    pub zone_id: String,
-    pub x: u8,
-    pub y: u8,
-    pub associated_piles: Vec<String>,
 }
 
 pub fn load_piles(path: Option<&Path>) -> Result<Vec<Pile>, EngineError> {
@@ -38,10 +34,6 @@ pub fn parse_piles_csv(raw: &str) -> Result<Vec<Pile>, EngineError> {
 
     let id_idx = col(&headers, "id")?;
     let name_idx = col(&headers, "name")?;
-    let zone_id_idx = col(&headers, "zone_id")?;
-    let x_idx = col(&headers, "x")?;
-    let y_idx = col(&headers, "y")?;
-    let assoc_idx = headers.get("associated_piles").copied();
 
     let mut piles = Vec::new();
     for (line_idx, record) in reader.records().enumerate() {
@@ -50,30 +42,10 @@ pub fn parse_piles_csv(raw: &str) -> Result<Vec<Pile>, EngineError> {
 
         let id = req(&record, id_idx, "id", line)?;
         let name = req(&record, name_idx, "name", line)?;
-        let zone_id = req(&record, zone_id_idx, "zone_id", line)?;
-        let x = opt_u8(&record, x_idx, "x", line)?;
-        let y = opt_u8(&record, y_idx, "y", line)?;
-
-        let associated_piles = assoc_idx
-            .and_then(|idx| record.get(idx))
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(|v| {
-                v.split(',')
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(ToString::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
 
         piles.push(Pile {
             id,
             name,
-            zone_id,
-            x,
-            y,
-            associated_piles,
         });
     }
     Ok(piles)
@@ -118,9 +90,8 @@ mod tests {
         let piles = parse_piles_csv(csv).expect("parse piles");
         assert_eq!(piles.len(), 2);
         assert_eq!(piles[0].id, "deck");
-        assert_eq!(piles[0].x, 0);
-        assert_eq!(piles[0].y, 4);
-        assert_eq!(piles[0].associated_piles, vec!["main_stack", "discard"]);
-        assert!(piles[1].associated_piles.is_empty());
+        assert_eq!(piles[0].name, "Deck");
+        assert_eq!(piles[1].id, "hand");
+        assert_eq!(piles[1].name, "Hand");
     }
 }

@@ -196,8 +196,6 @@ mod tests {
         id: &str,
         name: &str,
         card_type: CardType,
-        is_commander: bool,
-        is_partner: bool,
     ) -> Card {
         Card {
             id: id.to_string(),
@@ -208,8 +206,6 @@ mod tests {
             oracle_text: None,
             power: None,
             toughness: None,
-            is_commander,
-            is_partner,
             token_pools: Vec::new(),
             starting_pile: None,
         }
@@ -228,13 +224,11 @@ mod tests {
         let log_path = test_log_path("moves");
         let mut engine = CardEngine::new(
             vec![
-                test_card("land", "Island", CardType::Land, false, false),
+                test_card("land", "Island", CardType::Land),
                 test_card(
                     "creature",
                     "Grizzly Bears",
                     CardType::Creature,
-                    false,
-                    false,
                 ),
             ],
             Some(&log_path),
@@ -262,9 +256,9 @@ mod tests {
         let log_path = test_log_path("commander");
         let mut engine = CardEngine::new(
             vec![
-                test_card("p1", "Partner One", CardType::Creature, true, true),
-                test_card("p2", "Partner Two", CardType::Creature, true, true),
-                test_card("solo", "Solo Commander", CardType::Creature, true, false),
+                test_card("p1", "Partner One", CardType::Creature),
+                test_card("p2", "Partner Two", CardType::Creature),
+                test_card("solo", "Solo Commander", CardType::Creature),
             ],
             Some(&log_path),
         );
@@ -298,8 +292,6 @@ mod tests {
                 "c1",
                 "Card One",
                 CardType::Creature,
-                false,
-                false,
             )],
             Some(&log_path),
         );
@@ -338,8 +330,6 @@ mod tests {
                 oracle_text: None,
                 power: None,
                 toughness: None,
-                is_commander: false,
-                is_partner: false,
                 token_pools: vec![
                     TokenPool::configured(
                         "charge",
