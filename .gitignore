@@ -1,4 +1,6 @@
 /target
 
+.npmrc
+
 data/moves_log.csv
 **/target/**
