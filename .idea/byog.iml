@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/decks/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/engine/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/token-pools/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/cards/target" />
       <excludeFolder url="file://$MODULE_DIR$/decks/target" />
       <excludeFolder url="file://$MODULE_DIR$/engine/target" />

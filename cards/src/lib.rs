@@ -4,7 +4,6 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -15,4 +14,3 @@ mod tests {
         assert_eq!(result, 4);
     }
 }
-

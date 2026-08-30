@@ -1,25 +1,17 @@
-use crate::card::{Card, CardType};
+use crate::card::Card;
 use crate::engine::EngineError;
-use crate::token_pool::TokenPool;
+use cards::cards::CardVisual;
 use std::collections::HashMap;
 use std::env;
-use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
-use Pile;
+use token_pools::TokenPool;
 
 const DEFAULT_CARDS_CSV_PATH: &str = "data/cards.csv";
-const DEFAULT_PILES_CSV_PATH: &str = "data/piles.csv";
 
 pub fn cards_csv_path() -> PathBuf {
     env::var("CARDS_CSV_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_CARDS_CSV_PATH))
-}
-
-pub fn piles_csv_path() -> PathBuf {
-    env::var("PILES_CSV_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_PILES_CSV_PATH))
 }
 
 pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
@@ -60,13 +52,31 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
 
         cards.push(Card {
             id,
+            game_id: String::new(),
             name,
-            card_type: CardType::parse(&card_type_raw),
-            mana_cost: optional_value(&record, headers.get("mana_cost").copied()),
+            card_type_id: card_type_id(&card_type_raw),
+            description: None,
+            visual: CardVisual::Generated {
+                image: None,
+                background_image: None,
+                background_color: None,
+                icon: None,
+            },
+            back_logo: None,
+            cost: None, // todo add this back in.
+            mana: optional_value(
+                &record,
+                headers
+                    .get("cost")
+                    .copied()
+                    .or_else(|| headers.get("mana").copied()),
+            ),
             colors: optional_value(&record, headers.get("colors").copied()),
             oracle_text: optional_value(&record, headers.get("oracle_text").copied()),
             power: optional_value(&record, headers.get("power").copied()),
             toughness: optional_value(&record, headers.get("toughness").copied()),
+            is_commander: optional_bool(&record, headers.get("is_commander").copied()),
+            is_partner: optional_bool(&record, headers.get("is_partner").copied()),
             token_pools: optional_token_pools(
                 &record,
                 headers.get("token_pools").copied(),
@@ -77,6 +87,10 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
     }
 
     Ok(cards)
+}
+
+fn card_type_id(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace(' ', "-")
 }
 
 fn required_value(
@@ -151,7 +165,7 @@ mod tests {
         assert_eq!(cards[0].id, "1");
         assert_eq!(cards[0].name, "Sol Ring");
         assert_eq!(cards[0].token_pools[0].token(), "fa-bolt");
-        assert_eq!(cards[1].mana_cost, None);
+        assert_eq!(cards[1].mana, None);
         assert_eq!(cards[1].oracle_text, None);
         assert!(cards[1].token_pools.is_empty());
     }

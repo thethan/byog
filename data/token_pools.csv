@@ -1,0 +1,8 @@
+game_id,id,token_type_id,label,owner,owner_id,starting,plus,minus,min,max,parent_id,active,background,icon_color
+byog,life,life,Life,player,,40,1,1,0,,,true,,
+byog,commander-damage,commander-damage,Commander Damage,player,,21,1,1,0,,life,true,,
+byog,red-mana,red-mana,Red Mana,player,,0,1,1,0,,,true,,red
+byog,black-mana,black-mana,Black Mana,player,,0,1,1,0,,,true,,black
+byog,blue-mana,blue-mana,Blue Mana,player,,0,1,1,0,,,true,,blue
+byog,green-mana,green-mana,Green Mana,player,,0,1,1,0,,,true,,green
+byog,white-mana,white-mana,White Mana,player,,0,1,1,0,,,true,,yellow

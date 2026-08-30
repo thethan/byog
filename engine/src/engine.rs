@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::card::Card;
 use crate::move_logger::{MoveLogEntry, MoveLogger};
-use crate::token_pool::TokenPool;
 use crate::zones::{GameState, Zone};
+use token_pools::TokenPool;
 
 #[derive(Debug)]
 pub enum EngineError {
@@ -27,6 +27,8 @@ impl std::error::Error for EngineError {}
 pub struct CardEngine {
     pub state: GameState,
     pub logger: MoveLogger,
+    pub move_history: Vec<MoveLogEntry>,
+    pub audit_log: Vec<MoveLogEntry>,
 }
 
 impl CardEngine {
@@ -34,6 +36,8 @@ impl CardEngine {
         Self {
             state: GameState::new(cards),
             logger: MoveLogger::new(move_log_path),
+            move_history: Vec::new(),
+            audit_log: Vec::new(),
         }
     }
 
@@ -43,9 +47,86 @@ impl CardEngine {
         to: Zone,
         card_id: &str,
     ) -> Result<MoveLogEntry, EngineError> {
+        if from == to {
+            return Err(EngineError::Validation(
+                "Source and destination piles must differ".into(),
+            ));
+        }
+        let card = self.state.card_by_id(card_id)?.clone();
         self.state.move_card(from, to, card_id)?;
-        let card = self.state.card_by_id(card_id)?;
-        self.logger.append_move("move_card", card, from, to, None)
+        match self.logger.append_move("move_card", &card, from, to, None) {
+            Ok(entry) => {
+                self.move_history.push(entry.clone());
+                self.audit_log.push(entry.clone());
+                Ok(entry)
+            }
+            Err(err) => {
+                let _ = self.state.move_card(to, from, card_id);
+                Err(err)
+            }
+        }
+    }
+
+    pub fn move_card_between_piles(
+        &mut self,
+        from_pile: &str,
+        to_pile: &str,
+        card_id: &str,
+    ) -> Result<MoveLogEntry, EngineError> {
+        let from = Zone::from_pile_id(from_pile)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown pile '{from_pile}'")))?;
+        let to = Zone::from_pile_id(to_pile)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown pile '{to_pile}'")))?;
+        self.move_card(from, to, card_id)
+    }
+
+    pub fn search_pile(&self, pile_id: &str, query: &str) -> Result<Vec<Card>, EngineError> {
+        let zone = Zone::from_pile_id(pile_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown pile '{pile_id}'")))?;
+        Ok(self
+            .state
+            .search_cards(zone, query)
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+
+    pub fn move_card_to_bottom(&mut self, pile_id: &str, card_id: &str) -> Result<(), EngineError> {
+        let zone = Zone::from_pile_id(pile_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown pile '{pile_id}'")))?;
+        self.state.move_card_to_bottom(zone, card_id)
+    }
+
+    pub fn undo_last_move(&mut self) -> Result<MoveLogEntry, EngineError> {
+        let previous = self
+            .move_history
+            .pop()
+            .ok_or_else(|| EngineError::Validation("There are no moves to undo".into()))?;
+        let from = Zone::from_pile_id(&to_pile_id(&previous.to_zone))
+            .ok_or_else(|| EngineError::Validation("Invalid destination in move history".into()))?;
+        let to = Zone::from_pile_id(&to_pile_id(&previous.from_zone))
+            .ok_or_else(|| EngineError::Validation("Invalid source in move history".into()))?;
+        let card = self.state.card_by_id(&previous.card_id)?.clone();
+        self.state.move_card(from, to, &previous.card_id)?;
+        let note = format!("reverts {} at {}", previous.action, previous.timestamp);
+        match self
+            .logger
+            .append_move("undo", &card, from, to, Some(&note))
+        {
+            Ok(entry) => {
+                self.audit_log.push(entry.clone());
+                Ok(entry)
+            }
+            Err(err) => {
+                let _ = self.state.move_card(to, from, &previous.card_id);
+                self.move_history.push(previous);
+                Err(err)
+            }
+        }
+    }
+
+    pub fn move_history_csv(&self) -> Result<String, EngineError> {
+        MoveLogger::entries_to_csv(&self.audit_log)
     }
 
     pub fn draw(&mut self) -> Result<MoveLogEntry, EngineError> {
@@ -67,36 +148,61 @@ impl CardEngine {
             .push(card_id.clone());
 
         let card = self.state.card_by_id(&card_id)?;
-        self.logger
-            .append_move("draw", card, from_zone, Zone::Hand, note)
+        let entry = self
+            .logger
+            .append_move("draw", card, from_zone, Zone::Hand, note)?;
+        self.move_history.push(entry.clone());
+        self.audit_log.push(entry.clone());
+        Ok(entry)
     }
 
     pub fn play_land(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
         self.state.move_card(Zone::Hand, Zone::Lands, card_id)?;
-        self.logger
-            .append_move("play_land", &card, Zone::Hand, Zone::Lands, None)
+        let entry = self
+            .logger
+            .append_move("play_land", &card, Zone::Hand, Zone::Lands, None)?;
+        self.move_history.push(entry.clone());
+        self.audit_log.push(entry.clone());
+        Ok(entry)
     }
 
     pub fn discard(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         self.state.move_card(from, Zone::Discard, card_id)?;
         let card = self.state.card_by_id(card_id)?;
-        self.logger
-            .append_move("discard", card, from, Zone::Discard, None)
+        let entry = self
+            .logger
+            .append_move("discard", card, from, Zone::Discard, None)?;
+        self.move_history.push(entry.clone());
+        self.audit_log.push(entry.clone());
+        Ok(entry)
     }
 
     pub fn exile(&mut self, from: Zone, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         self.state.move_card(from, Zone::Exile, card_id)?;
         let card = self.state.card_by_id(card_id)?;
-        self.logger
-            .append_move("exile", card, from, Zone::Exile, None)
+        let entry = self
+            .logger
+            .append_move("exile", card, from, Zone::Exile, None)?;
+        self.move_history.push(entry.clone());
+        self.audit_log.push(entry.clone());
+        Ok(entry)
     }
 
     pub fn cast_to_battlefield(&mut self, card_id: &str) -> Result<MoveLogEntry, EngineError> {
         let card = self.state.card_by_id(card_id)?.clone();
-        self.state.move_card(Zone::Hand, Zone::Battlefield, card_id)?;
-        self.logger
-            .append_move("cast_to_battlefield", &card, Zone::Hand, Zone::Battlefield, None)
+        self.state
+            .move_card(Zone::Hand, Zone::Battlefield, card_id)?;
+        let entry = self.logger.append_move(
+            "cast_to_battlefield",
+            &card,
+            Zone::Hand,
+            Zone::Battlefield,
+            None,
+        )?;
+        self.move_history.push(entry.clone());
+        self.audit_log.push(entry.clone());
+        Ok(entry)
     }
 
     pub fn peek_main_stack(&self, count: usize) -> Vec<String> {
@@ -121,6 +227,30 @@ impl CardEngine {
         pool: TokenPool,
     ) -> Result<(), EngineError> {
         self.state.add_card_token_pool(card_id, pool)
+    }
+
+    pub fn add_tokens_to_player_pool(
+        &mut self,
+        player_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state
+            .add_tokens_to_player_pool(player_id, pool_id, amount)
+    }
+
+    pub fn set_player_name(&mut self, player_id: &str, name: &str) -> Result<(), EngineError> {
+        self.state.set_player_name(player_id, name)
+    }
+
+    pub fn remove_tokens_from_player_pool(
+        &mut self,
+        player_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.state
+            .remove_tokens_from_player_pool(player_id, pool_id, amount)
     }
 
     pub fn activate_zone_token_pool(
@@ -181,33 +311,66 @@ impl CardEngine {
     }
 }
 
+fn to_pile_id(zone: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in zone.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            out.push('_');
+        }
+        out.extend(ch.to_lowercase());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::card::{Card, CardType};
-    use crate::token_pool::TokenPool;
     use crate::zones::Zone;
+    use cards::cards::CardVisual;
+    use token_pools::TokenPool;
 
     use super::CardEngine;
 
-    fn test_card(
-        id: &str,
-        name: &str,
-        card_type: CardType,
-    ) -> Card {
+    fn test_card(id: &str, name: &str, card_type: CardType) -> Card {
         Card {
             id: id.to_string(),
+            game_id: String::new(),
             name: name.to_string(),
-            card_type,
-            mana_cost: None,
+            card_type_id: card_type.id,
+            description: None,
+            cost: None,
+            visual: CardVisual::Generated {
+                image: None,
+                background_image: None,
+                background_color: None,
+                icon: None,
+            },
+            back_logo: None,
+            mana: None,
             colors: None,
             oracle_text: None,
             power: None,
             toughness: None,
+            is_commander: false,
+            is_partner: false,
             token_pools: Vec::new(),
             starting_pile: None,
+        }
+    }
+
+    fn card_type(name: &str) -> CardType {
+        CardType {
+            id: name.to_ascii_lowercase(),
+            game_id: String::new(),
+            name: name.to_string(),
+            description: None,
+            background_image: None,
+            background_color: None,
+            icon: None,
+            back_logo: None,
         }
     }
 
@@ -224,12 +387,8 @@ mod tests {
         let log_path = test_log_path("moves");
         let mut engine = CardEngine::new(
             vec![
-                test_card("land", "Island", CardType::Land),
-                test_card(
-                    "creature",
-                    "Grizzly Bears",
-                    CardType::Creature,
-                ),
+                test_card("land", "Island", card_type("Land")),
+                test_card("creature", "Grizzly Bears", card_type("Creature")),
             ],
             Some(&log_path),
         );
@@ -246,7 +405,9 @@ mod tests {
         engine.draw().expect("draw 2");
 
         engine.play_land("land").expect("play land");
-        engine.play_land("creature").expect("play non-land to lands");
+        engine
+            .play_land("creature")
+            .expect("play non-land to lands");
 
         fs::remove_file(log_path).ok();
     }
@@ -256,9 +417,9 @@ mod tests {
         let log_path = test_log_path("commander");
         let mut engine = CardEngine::new(
             vec![
-                test_card("p1", "Partner One", CardType::Creature),
-                test_card("p2", "Partner Two", CardType::Creature),
-                test_card("solo", "Solo Commander", CardType::Creature),
+                test_card("p1", "Partner One", card_type("Creature")),
+                test_card("p2", "Partner Two", card_type("Creature")),
+                test_card("solo", "Solo Commander", card_type("Creature")),
             ],
             Some(&log_path),
         );
@@ -288,11 +449,7 @@ mod tests {
     fn move_log_appends_rows_with_header_once() {
         let log_path = test_log_path("log");
         let mut engine = CardEngine::new(
-            vec![test_card(
-                "c1",
-                "Card One",
-                CardType::Creature,
-            )],
+            vec![test_card("c1", "Card One", card_type("Creature"))],
             Some(&log_path),
         );
 
@@ -310,11 +467,67 @@ mod tests {
         let lines = logged.lines().collect::<Vec<_>>();
         assert_eq!(
             lines[0],
-            "timestamp,action,card_id,card_name,from_zone,to_zone,notes"
+            "timestamp,action,card_id,card_name,from_pile,to_pile,notes"
         );
         assert_eq!(lines.len(), 3);
 
         fs::remove_file(log_path).ok();
+    }
+
+    #[test]
+    fn searches_moves_and_undoes_a_card_between_piles() {
+        let log_path = test_log_path("pile_move");
+        let mut engine = CardEngine::new(
+            vec![test_card("c1", "Silvercoat Lion", card_type("Creature"))],
+            Some(&log_path),
+        );
+        engine
+            .state
+            .set_zone_cards(Zone::Deck, vec!["c1".into()])
+            .expect("seed deck");
+
+        let found = engine.search_pile("deck", "lion").expect("search pile");
+        assert_eq!(found[0].id, "c1");
+        engine
+            .move_card_between_piles("deck", "hand", "c1")
+            .expect("move card");
+        assert_eq!(engine.state.zone_cards(Zone::Hand), &["c1"]);
+        engine.undo_last_move().expect("undo move");
+        assert_eq!(engine.state.zone_cards(Zone::Deck), &["c1"]);
+
+        let csv = fs::read_to_string(&log_path).expect("read log");
+        assert!(csv.contains(",move_card,c1,Silvercoat Lion,Deck,Hand,"));
+        assert!(csv.contains(",undo,c1,Silvercoat Lion,Hand,Deck,"));
+        fs::remove_file(log_path).ok();
+    }
+
+    #[test]
+    fn moves_a_selected_deck_card_to_the_bottom() {
+        let mut engine = CardEngine::new(
+            vec![
+                test_card("bottom", "Bottom", card_type("Creature")),
+                test_card("middle", "Middle", card_type("Creature")),
+                test_card("top", "Top", card_type("Creature")),
+            ],
+            None,
+        );
+        engine
+            .state
+            .set_zone_cards(
+                Zone::Deck,
+                vec!["bottom".into(), "middle".into(), "top".into()],
+            )
+            .expect("seed deck");
+
+        engine
+            .move_card_to_bottom("deck", "top")
+            .expect("move card to bottom");
+
+        assert_eq!(
+            engine.state.zone_cards(Zone::Deck),
+            &["top", "bottom", "middle"]
+        );
+        assert_eq!(engine.state.draw_top_from_deck().as_deref(), Some("middle"));
     }
 
     #[test]
@@ -323,13 +536,25 @@ mod tests {
         let mut engine = CardEngine::new(
             vec![Card {
                 id: "ring".to_string(),
+                game_id: String::new(),
                 name: "Sol Ring".to_string(),
-                card_type: CardType::Artifact,
-                mana_cost: None,
+                card_type_id: "artifact".to_string(),
+                description: None,
+                cost: None,
+                visual: CardVisual::Generated {
+                    image: None,
+                    background_image: None,
+                    background_color: None,
+                    icon: None,
+                },
+                back_logo: None,
+                mana: None,
                 colors: None,
                 oracle_text: None,
                 power: None,
                 toughness: None,
+                is_commander: false,
+                is_partner: false,
                 token_pools: vec![
                     TokenPool::configured(
                         "charge",

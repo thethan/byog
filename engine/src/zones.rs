@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 use crate::card::Card;
 use crate::engine::EngineError;
-use crate::token_pool::TokenPool;
-
-
+use crate::player::{DEFAULT_PLAYER_ID, Player};
+use token_pools::TokenPool;
 
 // Todo define these by csv in games. For instance one game may have a "Main Stack" and a "Sideboard" zone, while another game may have a "Main Stack" and a "Command Zone" zone. Another may have library and graveyard zones, while another may have a "Deck" and a "Discard" zone. create more generic zones that then get by ids.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -22,6 +21,52 @@ pub enum Zone {
     Battlefield,
 }
 
+#[cfg(test)]
+mod token_pool_parent_tests {
+    use super::GameState;
+    use crate::player::{DEFAULT_PLAYER_ID, Player};
+    use token_pools::TokenPool;
+
+    #[test]
+    fn child_changes_propagate_to_parent_atomically() {
+        let life = TokenPool::configured(
+            "life",
+            "Life",
+            "fa-solid fa-heart",
+            None,
+            40,
+            Some(0),
+            None,
+            true,
+        )
+        .unwrap();
+        let mut commander = TokenPool::configured(
+            "commander",
+            "Commander",
+            "fa-solid fa-helmet-battle",
+            None,
+            21,
+            Some(0),
+            None,
+            true,
+        )
+        .unwrap();
+        commander.parent_id = Some("life".into());
+        let mut state = GameState::new(Vec::new());
+        state.players.insert(
+            DEFAULT_PLAYER_ID.into(),
+            Player::with_token_pools(DEFAULT_PLAYER_ID, "Player 1", vec![life, commander]).unwrap(),
+        );
+
+        state
+            .remove_tokens_from_player_pool(DEFAULT_PLAYER_ID, "commander", 1)
+            .unwrap();
+        let pools = state.get_player_token_pools(DEFAULT_PLAYER_ID).unwrap();
+        assert_eq!(pools["commander"].count, 20);
+        assert_eq!(pools["life"].count, 39);
+    }
+}
+
 impl Zone {
     pub const ALL: &'static [Zone] = &[
         Zone::MainStack,
@@ -37,6 +82,33 @@ impl Zone {
         Zone::Battlefield,
     ];
 
+    pub fn from_pile_id(value: &str) -> Option<Self> {
+        match value {
+            "main_stack" => Some(Self::MainStack),
+            "commander_pile" => Some(Self::CommanderPile),
+            "hand" => Some(Self::Hand),
+            "lands" => Some(Self::Lands),
+            "deck" => Some(Self::Deck),
+            "discard" => Some(Self::Discard),
+            "exile" => Some(Self::Exile),
+            "artifacts" => Some(Self::Artifacts),
+            "enchantments" => Some(Self::Enchantments),
+            "creatures" => Some(Self::Creatures),
+            "battlefield" => Some(Self::Battlefield),
+            _ => None,
+        }
+    }
+
+    pub fn is_battlefield(&self) -> bool {
+        matches!(
+            self,
+            Self::Lands
+                | Self::Artifacts
+                | Self::Enchantments
+                | Self::Creatures
+                | Self::Battlefield
+        )
+    }
 }
 
 impl std::fmt::Display for Zone {
@@ -61,6 +133,7 @@ impl std::fmt::Display for Zone {
 pub struct GameState {
     pub cards: HashMap<String, Card>,
     pub zones: HashMap<Zone, Vec<String>>,
+    pub players: HashMap<String, Player>,
     pub zone_token_pools: HashMap<Zone, HashMap<String, TokenPool>>,
     pub card_token_pools: HashMap<String, HashMap<String, TokenPool>>,
 }
@@ -97,9 +170,92 @@ impl GameState {
         Self {
             cards,
             zones,
+            players: [(DEFAULT_PLAYER_ID.to_string(), Player::default())]
+                .into_iter()
+                .collect(),
             zone_token_pools,
             card_token_pools,
         }
+    }
+
+    pub fn player(&self, player_id: &str) -> Result<&Player, EngineError> {
+        self.players
+            .get(player_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown player id '{player_id}'")))
+    }
+
+    pub fn set_player_name(&mut self, player_id: &str, name: &str) -> Result<(), EngineError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(EngineError::Validation(
+                "Player name must not be empty".into(),
+            ));
+        }
+        self.players
+            .get_mut(player_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown player id '{player_id}'")))?
+            .name = name.to_string();
+        Ok(())
+    }
+
+    pub fn get_player_token_pools(
+        &self,
+        player_id: &str,
+    ) -> Result<&HashMap<String, TokenPool>, EngineError> {
+        Ok(&self.player(player_id)?.token_pools)
+    }
+
+    pub fn add_tokens_to_player_pool(
+        &mut self,
+        player_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.adjust_player_pool(player_id, pool_id, amount, true)
+    }
+
+    pub fn remove_tokens_from_player_pool(
+        &mut self,
+        player_id: &str,
+        pool_id: &str,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        self.adjust_player_pool(player_id, pool_id, amount, false)
+    }
+
+    fn adjust_player_pool(
+        &mut self,
+        player_id: &str,
+        pool_id: &str,
+        amount: u32,
+        add: bool,
+    ) -> Result<(), EngineError> {
+        let player = self
+            .players
+            .get_mut(player_id)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown player id '{player_id}'")))?;
+        let mut updated = player.token_pools.clone();
+        let mut current = Some(pool_id.to_string());
+        let mut visited = std::collections::HashSet::new();
+        while let Some(id) = current {
+            if !visited.insert(id.clone()) {
+                return Err(EngineError::Validation(format!(
+                    "Token pool parent cycle at '{id}'"
+                )));
+            }
+            let pool = updated
+                .get_mut(&id)
+                .ok_or_else(|| EngineError::Validation(format!("Unknown token pool '{id}'")))?;
+            if add {
+                pool.add_tokens(amount)
+            } else {
+                pool.remove_tokens(amount)
+            }
+            .map_err(EngineError::Validation)?;
+            current = pool.parent_id.clone();
+        }
+        player.token_pools = updated;
+        Ok(())
     }
 
     pub fn set_zone_cards(&mut self, zone: Zone, card_ids: Vec<String>) -> Result<(), EngineError> {
@@ -111,6 +267,45 @@ impl GameState {
 
     pub fn zone_cards(&self, zone: Zone) -> &[String] {
         self.zones.get(&zone).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    pub fn shuffle_zone(&mut self, zone: Zone) -> Result<(), EngineError> {
+        let cards = self
+            .zones
+            .get_mut(&zone)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))?;
+        for index in (1..cards.len()).rev() {
+            let swap_with = rand::random_range(0..=index);
+            cards.swap(index, swap_with);
+        }
+        Ok(())
+    }
+
+    pub fn move_card_to_bottom(&mut self, zone: Zone, card_id: &str) -> Result<(), EngineError> {
+        let cards = self
+            .zones
+            .get_mut(&zone)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown zone: {zone}")))?;
+        let position = cards.iter().position(|id| id == card_id).ok_or_else(|| {
+            EngineError::Validation(format!("Card '{card_id}' is not in zone {zone}"))
+        })?;
+        let card_id = cards.remove(position);
+        cards.insert(0, card_id);
+        Ok(())
+    }
+
+    pub fn search_cards(&self, zone: Zone, query: &str) -> Vec<&Card> {
+        let query = query.trim().to_ascii_lowercase();
+        self.zone_cards(zone)
+            .iter()
+            .filter_map(|id| self.cards.get(id))
+            .filter(|card| {
+                query.is_empty()
+                    || card.id.to_ascii_lowercase().contains(&query)
+                    || card.name.to_ascii_lowercase().contains(&query)
+                    || card.card_type_id.to_ascii_lowercase().contains(&query)
+            })
+            .collect()
     }
 
     pub fn draw_top_from_main_stack(&mut self) -> Option<String> {
@@ -149,6 +344,11 @@ impl GameState {
                 commander_cards.retain(|id| id != card_id);
             }
             commander_cards.push(card_id.to_string());
+            if commander_cards.len() > 2 {
+                return Err(EngineError::Validation(
+                    "Commander pile cannot contain more than two cards".to_string(),
+                ));
+            }
         }
 
         {

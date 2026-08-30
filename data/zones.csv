@@ -1,8 +1,11 @@
-id,name,color,grid
-command_zone,Command Zone,violet,"0,0.8x4"
-deck_zone,Deck Zone,sky,"0,4.8x4"
-stack_zone,Stack,indigo,"8,4.8x4"
-discard_zone,Discard,rose,"16,4.8x4"
-exile_zone,Exile,orange,"24,4.8x4"
-battlefield,Battlefield,emerald,"0,8.32x16"
-hand,Hand,cyan,"0,28.32x4"
+id,name,color,grid,width,parent_zone,scope,token_pools
+command_zone,Command Zone,violet,"0,0.8x1",8,,player,
+deck_zone,Deck Zone,sky,"0,1.16x1",16,,player,
+discard_zone,Discard,rose,"16,1.8x1",8,,player,"id=morale|label=Morale|icon=fa-solid fa-flag|background=rose|starting=0|min=0|max=10|active=true"
+exile_zone,Exile,orange,"24,1.8x1",8,,player,
+main_zone,Main Zone,emerald,"0,2.32x4",32,,player,"id=initiative|label=Initiative|icon=fa-solid fa-shield-halved|background=emerald|starting=0|min=0|max=1|active=false"
+lands_zone,Lands,lime,"0,0.32x1",32,main_zone,player,
+artifacts_zone,Artifacts,amber,"0,1.32x1",32,main_zone,player,
+enchantments_zone,Enchantments,fuchsia,"0,2.32x1",32,main_zone,player,
+creatures_zone,Creatures,emerald,"0,3.32x1",32,main_zone,player,
+hand,Hand,cyan,"0,28.32x4",32,,player,"id=energy|label=Energy|icon=fa-solid fa-bolt|background=amber|starting=1|min=0|max=9|active=true"

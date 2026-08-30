@@ -1,0 +1,187 @@
+use std::env;
+use std::path::{Path, PathBuf};
+
+use engine::EngineError;
+
+const DEFAULT_PILES_CSV_PATH: &str = "data/piles.csv";
+
+pub fn piles_csv_path() -> PathBuf {
+    env::var("PILES_CSV_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_PILES_CSV_PATH))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pile {
+    pub id: String,
+    pub name: String,
+    pub deck_id: Option<String>,
+    pub zone_id: String,
+    pub x: u8,
+    pub y: u8,
+    pub associated_piles: Vec<String>,
+    /// Whether card identities are shown on the board without an explicit search.
+    pub visible: bool,
+}
+
+pub fn load_piles(path: Option<&Path>) -> Result<Vec<Pile>, EngineError> {
+    let path = path.map(PathBuf::from).unwrap_or_else(piles_csv_path);
+    parse_piles_csv(&std::fs::read_to_string(&path).map_err(EngineError::Io)?)
+}
+
+pub fn parse_piles_csv(raw: &str) -> Result<Vec<Pile>, EngineError> {
+    let mut reader = csv::Reader::from_reader(raw.as_bytes());
+    let headers: std::collections::HashMap<String, usize> = reader
+        .headers()
+        .map_err(EngineError::Csv)?
+        .iter()
+        .enumerate()
+        .map(|(i, h)| (h.trim().to_ascii_lowercase(), i))
+        .collect();
+
+    let id_idx = col(&headers, "id")?;
+    let name_idx = col(&headers, "name")?;
+    let zone_idx = col(&headers, "zone_id")?;
+    let x_idx = col(&headers, "x")?;
+    let y_idx = col(&headers, "y")?;
+
+    let mut piles = Vec::new();
+    for (line_idx, record) in reader.records().enumerate() {
+        let record = record.map_err(EngineError::Csv)?;
+        let line = line_idx + 2;
+
+        let id = req(&record, id_idx, "id", line)?;
+        let name = req(&record, name_idx, "name", line)?;
+        let zone_id = req(&record, zone_idx, "zone_id", line)?;
+        let x = opt_u8(&record, x_idx, "x", line)?;
+        let y = opt_u8(&record, y_idx, "y", line)?;
+        let deck_id = headers
+            .get("deck_id")
+            .and_then(|idx| record.get(*idx))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
+        let associated_piles = headers
+            .get("associated_piles")
+            .and_then(|idx| record.get(*idx))
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string)
+            .collect();
+        let visible = opt_bool(
+            &record,
+            headers.get("visible").copied(),
+            "visible",
+            line,
+            true,
+        )?;
+
+        piles.push(Pile {
+            id,
+            name,
+            deck_id,
+            zone_id,
+            x,
+            y,
+            associated_piles,
+            visible,
+        });
+    }
+    Ok(piles)
+}
+
+fn opt_bool(
+    record: &csv::StringRecord,
+    idx: Option<usize>,
+    field: &str,
+    line: usize,
+    default: bool,
+) -> Result<bool, EngineError> {
+    let Some(raw) = idx
+        .and_then(|idx| record.get(idx))
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(default);
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "true" | "yes" | "1" => Ok(true),
+        "false" | "no" | "0" => Ok(false),
+        _ => Err(EngineError::Validation(format!(
+            "Invalid boolean for '{field}' at piles CSV line {line}: '{raw}'"
+        ))),
+    }
+}
+
+fn col(
+    headers: &std::collections::HashMap<String, usize>,
+    name: &str,
+) -> Result<usize, EngineError> {
+    headers.get(name).copied().ok_or_else(|| {
+        EngineError::Validation(format!("Missing required '{name}' column in piles CSV"))
+    })
+}
+
+fn req(
+    record: &csv::StringRecord,
+    idx: usize,
+    field: &str,
+    line: usize,
+) -> Result<String, EngineError> {
+    record
+        .get(idx)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            EngineError::Validation(format!(
+                "Missing required '{field}' at piles CSV line {line}"
+            ))
+        })
+}
+
+fn opt_u8(
+    record: &csv::StringRecord,
+    idx: usize,
+    field: &str,
+    line: usize,
+) -> Result<u8, EngineError> {
+    let raw = record
+        .get(idx)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("0");
+    raw.parse::<u8>().map_err(|_| {
+        EngineError::Validation(format!(
+            "Invalid u8 for '{field}' at piles CSV line {line}: '{raw}'"
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_piles_csv;
+
+    #[test]
+    fn parses_piles_csv() {
+        let csv = "id,name,zone_id,x,y,associated_piles\n\
+                   deck,Deck,deck_zone,0,4,\"main_stack,discard\"\n\
+                   hand,Hand,hand,0,28,\n";
+        let piles = parse_piles_csv(csv).expect("parse piles");
+        assert_eq!(piles.len(), 2);
+        assert_eq!(piles[0].id, "deck");
+        assert_eq!(piles[0].name, "Deck");
+        assert!(piles[0].visible);
+        assert_eq!(piles[1].id, "hand");
+        assert_eq!(piles[1].name, "Hand");
+    }
+
+    #[test]
+    fn parses_hidden_pile() {
+        let csv = "id,name,zone_id,x,y,visible\ndeck,Deck,deck_zone,0,4,false\n";
+        let piles = parse_piles_csv(csv).expect("parse piles");
+        assert!(!piles[0].visible);
+    }
+}

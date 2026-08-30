@@ -12,7 +12,7 @@ Required headers:
 - `card_type` (or `type`)
 
 Optional headers/values:
-- `mana_cost`
+- `mana` (resource names can match token type IDs from `data/token_types.csv`)
 - `colors`
 - `oracle_text`
 - `power`
@@ -24,7 +24,7 @@ Optional headers/values:
 Example row:
 
 ```csv
-id,name,card_type,mana_cost,colors,oracle_text,power,toughness,is_commander,is_partner,token_pools
+id,name,card_type,mana,colors,oracle_text,power,toughness,is_commander,is_partner,token_pools
 art1,Sol Ring,Artifact,1,,{T}: Add {C}{C}.,,,false,false,"id=charge|label=Charge|token=fa-bolt|background=amber|starting=1|min=0|max=3|active=true"
 ```
 
@@ -90,11 +90,27 @@ Rules:
 Use `validate_fa_icon(icon)` to check an icon string; invalid values return
 `EngineError::Validation`.
 
-Token pools can belong to zones or to individual cards.
+Token types are defined in `data/token_types.csv`, similarly to card types. A `Token`
+references a token type and may optionally reference a related card.
+
+Token pools are defined and assigned in `data/token_pools.csv`. Each pool has a
+`starting`, `plus`, and `minus` amount, a required Font Awesome icon inherited
+from its token type, and an owner: `player`, `card`, `creature`, `zone`, or
+`battlefield`. The optional `parent_id` propagates every increase or decrease to
+the parent pool atomically.
+
+Legacy inline token pools remain supported for cards and zones.
+
+Add the same optional `token_pools` column to `data/zones.csv` to configure a zone-owned pool. Zone and card pools use the format documented in the Card CSV schema above, including full Font Awesome classes in `icon`/`token` (for example `fa-solid fa-bolt`).
+
+Zones may also include a `scope` column. Use `player` for a separate copy owned by each player (such as a hand or deck), or `game` for a zone shared by everyone (such as a stack). The default is `player` when the column or value is omitted. Any other value is rejected during loading.
+
+Every new game also creates `player-1` with an active `life` token pool starting at 20. Player pools can be changed through `add_tokens_to_player_pool` and `remove_tokens_from_player_pool`.
 
 - Zone pools are managed on `GameState` / `CardEngine` with `set_zone_token_pools`, `add_zone_token_pool`, `activate_zone_token_pool`, `add_tokens_to_zone_pool`, and `remove_tokens_from_zone_pool`.
 - Card pools are loaded from `token_pools` CSV data or added later with `add_card_token_pool`.
 - Pools expose `token()` for the display token/icon and `background()` for UI styling.
+- Token icons use Font Awesome classes (for example `fa-solid fa-heart`); `background` selects the card-like colored surface behind the icon and count.
 - `min` and `max` bounds are validated when pools are created and whenever token counts change.
 
 ## Move log format
@@ -102,7 +118,7 @@ Token pools can belong to zones or to individual cards.
 Moves are appended to `data/moves_log.csv` (or `MOVES_LOG_PATH`) with header:
 
 ```csv
-timestamp,action,card_id,card_name,from_zone,to_zone,notes
+timestamp,action,card_id,card_name,from_pile,to_pile,notes
 ```
 
 Sample move row:
@@ -146,9 +162,10 @@ python -m http.server 8000
 
 Then visit `http://localhost:8000/web/`.
 
-### Play controls
+### Move control
 
-- **Draw**: move top card into Hand
-- **Auto Play First Hand Card**: land goes to LandPile, artifact/enchantment/creature goes to battlefield zones, others are discarded
-- **Discard First Hand Card**: move first hand card to Discard
-- **+1 Hand Energy**: increments the Hand zone energy token pool
+- **Move selected**: choose a source pile, select a matching card, and move it to a target pile
+
+Piles are defined in `data/piles.csv`; the optional `deck_id` column associates each pile with a deck. Set the optional `visible` column to `false` to hide card identities (for example, a deck). Hidden piles show their count and can be shuffled, move or temporarily reveal any number of cards selected from the top or at random. They also support explicit searches by card name, type, or ID. `visible` defaults to `true`, and every deck can be selected as a search source. Native runs append every card move to `data/moves_log.csv`. Browser runs keep the same audit in memory.
+
+Card counter bounds use the existing `token_pools` syntax with `id=counters`, for example `id=counters|label=Counters|token=fa-solid fa-plus|starting=1|min=1|max=5|active=true`. Cards without an explicit counters pool default to a minimum of zero and no maximum.

@@ -1,4 +1,3 @@
-
 use crate::engine::EngineError;
 
 fn validate_roll(sides: u32) -> Result<(), EngineError> {
@@ -64,7 +63,11 @@ pub fn validate_fa_icon(icon: &str) -> Result<(), EngineError> {
 
 /// Returns `true` if `s` matches `fa-[a-z0-9-]+`.
 fn is_fa_token(s: &str) -> bool {
-    s.starts_with("fa-") && s.len() > 3 && s[3..].chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    s.starts_with("fa-")
+        && s.len() > 3
+        && s[3..]
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// Returns `true` if `s` is a FA style prefix (not a standalone renderable icon).

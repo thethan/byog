@@ -3,91 +3,167 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BYOG – Game Board</title>
+    <meta name="description" content="BYOG card game board and card controls" />
+    <title>BYOG | Game Board</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script
+            src="https://kit.fontawesome.com/75b1a963e0.js"
+            crossorigin="anonymous"
+    ></script>
+    <script>
+      tailwind.config = { theme: { extend: { colors: { brand: { 50: "#ecf3ff", 500: "#465fff", 600: "#3641f5" } }, boxShadow: { theme: "0 1px 3px rgba(16,24,40,.1), 0 1px 2px rgba(16,24,40,.06)" } } } };
+    </script>
     <style>
-      /* 32×32 grid board */
-      #board {
-        display: grid;
-        grid-template-columns: repeat(32, minmax(0, 1fr));
-        grid-template-rows: repeat(32, minmax(0, 1fr));
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        position: relative;
-      }
-
-      /* Zone region overlays */
-      .zone-region {
-        pointer-events: none;
-        border-radius: 0.375rem;
-        opacity: 0.18;
-        position: absolute;
-        inset: 0;
-      }
-
-      /* Pile panels sit on top of zone regions */
-      .pile-panel {
-        z-index: 10;
-        min-width: 0;
-        overflow: hidden;
-      }
-
-      /* ── Portrait phone: stack piles vertically ── */
-      @media (max-width: 480px) and (orientation: portrait) {
-        #board {
-          display: flex;
-          flex-direction: column;
-          aspect-ratio: unset;
-          gap: 0.5rem;
-        }
-        .zone-region { display: none; }
-        .pile-panel {
-          grid-column: unset !important;
-          grid-row: unset !important;
-        }
-      }
-
-      /* ── Landscape phone: associated piles in rows ── */
-      @media (orientation: landscape) and (max-height: 500px) {
-        #board {
-          display: flex;
-          flex-wrap: wrap;
-          aspect-ratio: unset;
-          gap: 0.5rem;
-        }
-        .zone-region { display: none; }
-        .pile-panel {
-          grid-column: unset !important;
-          grid-row: unset !important;
-          flex: 1 1 calc(50% - 0.5rem);
-        }
-        .pile-group {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          flex: 1 1 100%;
-        }
-      }
+      #board { display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); grid-template-rows: repeat(24, minmax(0, 1fr)); row-gap: .5rem; width: 100%; min-height: 540px; position: relative; }
+      #hand-area { min-height: 10rem; }
+      .pile-panel { z-index: 10; min-width: 0; overflow: hidden; }
+      .pile-panel ul { scrollbar-width: thin; }
+      #card-modal::backdrop { background: rgba(17, 24, 39, .58); backdrop-filter: blur(2px); }
+      @media (max-width: 480px) and (orientation: portrait) { #board { display: flex; flex-direction: column; min-height: auto; gap: .75rem; } #hand-area { min-height: 9rem; } .zone-parent { display: flex; flex-direction: column; grid-column: unset !important; grid-row: unset !important; } .pile-panel { grid-column: unset !important; grid-row: unset !important; min-height: 9rem; } }
+      @media (orientation: landscape) and (max-height: 500px) { #board { display: flex; flex-wrap: wrap; min-height: auto; gap: .75rem; } .pile-panel { grid-column: unset !important; grid-row: unset !important; flex: 1 1 calc(50% - .75rem); } .pile-group { display: flex; flex-wrap: wrap; gap: .75rem; flex: 1 1 100%; } }
     </style>
   </head>
-  <body class="min-h-screen bg-slate-950 text-slate-100">
-    <main class="mx-auto max-w-screen-2xl p-3 md:p-5">
-      <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 class="text-2xl font-bold">BYOG</h1>
-        <div class="flex flex-wrap gap-2">
-          <button id="draw-btn" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40">Draw</button>
-          <button id="auto-play-btn" class="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40">Auto Play</button>
-          <button id="discard-btn" class="rounded bg-rose-600 px-3 py-2 text-sm font-semibold hover:bg-rose-500 disabled:opacity-40">Discard</button>
-          <button id="energy-btn" class="rounded bg-amber-600 px-3 py-2 text-sm font-semibold hover:bg-amber-500 disabled:opacity-40">+1 Energy</button>
+  <body class="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
+    <div class="min-h-screen lg:flex">
+      <aside class="border-b border-gray-200 bg-white lg:fixed lg:inset-y-0 lg:z-40 lg:w-[290px] lg:border-b-0 lg:border-r">
+        <div class="flex h-[72px] items-center gap-3 px-5 lg:px-7">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand-500 font-black text-white shadow-sm">B</span>
+          <div><p class="text-lg font-bold leading-none tracking-tight">BYOG</p><p class="mt-1 text-xs text-gray-500">Build your own game</p></div>
         </div>
-      </header>
+        <nav class="flex gap-2 overflow-x-auto px-4 pb-4 lg:block lg:space-y-1 lg:px-5 lg:pt-5" aria-label="Main navigation">
+          <p class="mb-3 hidden px-3 text-xs font-medium uppercase tracking-wider text-gray-400 lg:block">Menu</p>
+          <a href="#board-section" class="flex shrink-0 items-center gap-3 rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-medium text-brand-500">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+            Game board
+          </a>
+          <a href="#actions" class="flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100">
+            <svg class="h-5 w-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>
+            Card actions
+          </a>
+          <div class="flex shrink-0 items-end gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 lg:mt-2 lg:block lg:space-y-2" aria-label="Player menu">
+            <label class="block min-w-32 flex-1">
+              <span class="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">Player</span>
+              <select id="player-select" class="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" aria-label="Active player"></select>
+            </label>
+            <div class="flex gap-2 lg:grid lg:grid-cols-2">
+              <button id="rename-player" type="button" class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-500 transition hover:border-brand-300 hover:text-brand-600">Rename</button>
+              <button id="add-player" type="button" class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-500 transition hover:border-brand-300 hover:text-brand-600" aria-label="Add player">+ Add</button>
+            </div>
+          </div>
+        </nav>
+      </aside>
 
-      <p id="status" class="mb-3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300">Loading…</p>
+      <div class="min-w-0 flex-1 lg:ml-[290px]">
+        <header class="sticky top-0 z-30 flex min-h-[72px] items-center justify-between border-b border-gray-200 bg-white/95 px-4 backdrop-blur md:px-6">
+          <div><p class="text-xs font-medium text-gray-500">Gameplay / Overview</p><h1 class="mt-0.5 text-xl font-semibold text-gray-900">Game board</h1></div>
+          <span id="status" role="status" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm"><span class="h-2 w-2 rounded-full bg-amber-400"></span> Loading…</span>
+        </header>
 
-      <!-- 32×32 game board -->
-      <div id="board" class="rounded-xl border border-slate-700 bg-slate-900 p-1"></div>
-    </main>
+        <main id="player-board-panel" aria-label="Active player board" class="mx-auto max-w-[1600px] p-4 md:p-6">
+          <section class="mb-6 grid gap-4 sm:grid-cols-3" aria-label="Game summary">
+            <article class="min-w-0 rounded-2xl border border-cyan-200 bg-white p-5 shadow-theme sm:col-span-2"><div class="mb-3 flex items-center justify-between"><div><p id="hand-owner-label" class="text-sm font-medium text-gray-500">Player 1's hand</p><p id="hand-summary-count" class="mt-1 text-xs text-gray-400">0 cards</p></div><span class="rounded-lg bg-cyan-50 p-2 text-cyan-600">▤</span></div><div id="hand-area" class="min-w-0 overflow-hidden rounded-xl border border-cyan-200 bg-cyan-50/40 p-3"></div></article>
+            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme">
+              <div class="flex items-center justify-between"><p id="active-player-label" class="text-sm font-medium text-gray-500">Player 1</p><span class="rounded-lg bg-rose-50 p-2 text-rose-500" aria-hidden="true"><i class="fa-solid fa-heart"></i></span></div>
+              <div id="player-tokens" class="mt-3 flex max-h-40 min-h-8 flex-col items-start gap-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1" aria-label="Player token pools"><span class="text-sm text-gray-400">Loading life…</span></div>
+              <p class="mt-1 text-xs text-gray-400">Adjust your current life total</p>
+            </article>
+          </section>
 
-    <script type="module" src="./app.js"></script>
+          <section id="board-section" class="scroll-mt-24 rounded-2xl border border-gray-200 bg-white shadow-theme">
+            <div class="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6"><div><h2 id="zones-owner-label" class="text-base font-semibold">Player 1 zones</h2><p id="zones-owner-description" class="mt-1 text-sm text-gray-500">Showing Player 1's piles and token counts.</p></div><span class="w-fit rounded-full bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700">Player-owned zones</span></div>
+            <div class="space-y-4 p-3 md:p-5">
+              <div>
+                <p class="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-gray-400">Playfield</p>
+                <div id="board" class="rounded-xl border border-gray-200 bg-gray-50 p-2 md:p-3"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="actions" class="mt-6 scroll-mt-24 rounded-2xl border border-gray-200 bg-white shadow-theme">
+            <div class="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between md:px-6">
+              <div><p class="text-xs font-medium uppercase tracking-wider text-gray-400">Actions</p><h2 class="mt-1 text-base font-semibold">Manage cards</h2><p class="mt-1 text-sm text-gray-500">Choose a card and update the game state.</p></div>
+              <button id="move-menu-btn" type="button" aria-expanded="false" aria-controls="move-menu" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-50"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>Move card <span id="move-chevron" class="transition-transform" aria-hidden="true">⌄</span></button>
+            </div>
+            <div id="move-menu" class="hidden border-t border-gray-200 bg-gray-50/70 p-5 md:p-6">
+              <div class="grid gap-4 lg:grid-cols-[1fr_1.35fr_1fr_auto] lg:items-end">
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">From pile</span><select id="source-pile" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled></select></label>
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">Find a card</span><input id="card-search" type="search" placeholder="Search by name, type, or ID…" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled /></label>
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">Move to</span><select id="target-pile" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled></select></label>
+                <button id="move-btn" class="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40" disabled>Confirm move</button>
+              </div>
+              <p id="selection" class="mt-3 text-xs text-gray-500">Select a card from the chosen pile on the board.</p>
+            </div>
+          </section>
+
+          <section class="mt-6 min-w-0 rounded-2xl border border-violet-200 bg-white p-5 shadow-theme" aria-label="Opponent hands">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div><p id="opponent-hand-label" class="text-sm font-medium text-gray-500">Opponent hands</p><p id="opponent-hand-count" class="mt-1 text-xs text-gray-400">0 cards · hidden</p></div>
+              <div class="flex flex-wrap items-center gap-3">
+                <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-600"><input id="show-opponent-hand" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" /> Show opponent hands</label>
+                <button id="collapse-opponent-hands" type="button" aria-expanded="true" aria-controls="opponent-hand-area" class="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"><span data-collapse-label>Collapse</span><span data-collapse-chevron class="transition-transform" aria-hidden="true">⌃</span></button>
+              </div>
+            </div>
+            <div id="opponent-hand-area" class="grid min-h-24 gap-3 rounded-xl border border-violet-200 bg-violet-50/40 p-3 md:grid-cols-2" aria-live="polite"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog id="card-modal" aria-labelledby="card-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-2xl border-0 bg-white p-0 shadow-2xl">
+      <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4 sm:px-6">
+        <div>
+          <p id="card-modal-pile" class="text-xs font-medium uppercase tracking-wider text-gray-400"></p>
+          <h2 id="card-modal-title" class="mt-1 text-lg font-semibold text-gray-900"></h2>
+        </div>
+        <button id="card-modal-close" type="button" aria-label="Close card details" class="grid h-9 w-9 place-items-center rounded-lg text-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">×</button>
+      </div>
+
+      <div class="p-5 sm:p-6">
+        <article id="card-view" class="mx-auto aspect-[5/7] w-full max-w-[250px] overflow-hidden rounded-2xl border border-gray-300 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-4 text-white shadow-xl transition-transform duration-300">
+          <div class="flex h-full flex-col rounded-xl border border-white/15 bg-white/5 p-4">
+            <div class="flex items-start justify-between gap-3 border-b border-white/15 pb-3">
+              <h3 id="card-view-name" class="text-lg font-semibold leading-tight"></h3>
+              <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-xs">◆</span>
+            </div>
+            <div class="my-4 grid flex-1 place-items-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-500/40 to-violet-500/20">
+              <span class="text-5xl text-white/80" aria-hidden="true">✦</span>
+            </div>
+            <div class="rounded-lg bg-black/20 p-3">
+              <p id="card-view-type" class="text-sm font-medium"></p>
+              <p id="card-view-id" class="mt-1 break-all text-[11px] text-white/55"></p>
+            </div>
+          </div>
+        </article>
+        <div class="mx-auto mt-5 flex max-w-[320px] items-center justify-center gap-3">
+          <button id="card-modal-tap" type="button" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Tap</button>
+          <button id="card-modal-bottom" type="button" class="hidden rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100">Move to bottom</button>
+          <div class="inline-flex items-center overflow-hidden rounded-lg border border-gray-300 bg-white" aria-label="Card counters">
+            <button id="card-counter-remove" type="button" aria-label="Remove counter" class="grid h-10 w-10 place-items-center text-lg text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35">−</button>
+            <span id="card-counter-count" class="min-w-12 border-x border-gray-200 px-3 text-center text-sm font-semibold text-gray-800">0</span>
+            <button id="card-counter-add" type="button" aria-label="Add counter" class="grid h-10 w-10 place-items-center text-lg text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200 bg-gray-50 px-5 py-4 sm:px-6">
+        <label for="card-modal-target" class="mb-1.5 block text-sm font-medium text-gray-700">Move to</label>
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <select id="card-modal-target" class="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50"></select>
+          <button id="card-modal-move" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40">Move card <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="opponent-modal" aria-labelledby="opponent-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-md overflow-hidden rounded-2xl border-0 bg-white p-0 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <div><p class="text-xs font-medium uppercase tracking-wider text-violet-500">Opponent</p><div class="mt-1 flex items-center gap-2"><h2 id="opponent-modal-title" class="text-lg font-semibold text-gray-900"></h2><button id="opponent-rename" type="button" class="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-violet-600">Rename</button></div></div>
+        <button id="opponent-modal-close" type="button" aria-label="Close opponent details" class="grid h-9 w-9 place-items-center rounded-lg text-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">×</button>
+      </div>
+      <div class="p-5">
+        <p class="mb-3 text-sm text-gray-500">Adjust this opponent's token pools.</p>
+        <div id="opponent-token-pools" class="max-h-[60vh] space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1"></div>
+      </div>
+    </dialog>
+    <script type="module" src="./app.js?v=18"></script>
   </body>
 </html>
