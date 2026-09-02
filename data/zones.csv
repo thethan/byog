@@ -1,0 +1,12 @@
+id,name,color,grid,width,parent_zone,scope,token_pools,allowed_card_types,max_cards
+command_zone,Command Zone,violet,"0,0.8x1",8,,player,,,2
+deck_zone,Deck Zone,sky,"0,1.16x1",16,,player,,,
+discard_zone,Discard,rose,"16,1.8x1",8,,player,"id=morale|label=Morale|icon=fa-solid fa-flag|background=rose|starting=0|min=0|max=10|active=true",,
+exile_zone,Exile,orange,"24,1.8x1",8,,player,,,
+main_zone,Main Zone,emerald,"0,2.32x5",32,,player,"id=initiative|label=Initiative|icon=fa-solid fa-shield-halved|background=emerald|starting=0|min=0|max=1|active=false",,
+lands_zone,Lands,lime,"0,0.32x1",32,main_zone,player,,land,
+artifacts_zone,Artifacts,amber,"0,1.32x1",32,main_zone,player,,artifact,
+enchantments_zone,Enchantments,fuchsia,"0,2.32x1",32,main_zone,player,,enchantment,
+creatures_zone,Creatures,emerald,"0,3.32x1",32,main_zone,player,,creature,
+main_board_zone,Main Board,emerald,"0,4.32x1",32,main_zone,player,,,
+hand,Hand,cyan,"0,28.32x4",32,,player,"id=energy|label=Energy|icon=fa-solid fa-bolt|background=amber|starting=1|min=0|max=9|active=true",,

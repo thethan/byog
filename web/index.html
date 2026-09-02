@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="BYOG card game board and card controls" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>BYOG | Turtle Power</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+            src="https://kit.fontawesome.com/75b1a963e0.js"
+            crossorigin="anonymous"
+    ></script>
+    <script>
+      tailwind.config = { theme: { extend: { colors: { brand: { 50: "#ecf3ff", 500: "#465fff", 600: "#3641f5" } }, boxShadow: { theme: "0 1px 3px rgba(16,24,40,.1), 0 1px 2px rgba(16,24,40,.06)" } } } };
+    </script>
+    <style>
+      body { background: #07130e url("https://storage.googleapis.com/archidekt-card-images/tmc/72e637db-7112-406f-809b-0eda248488b5_art_crop.jpg") center top / cover fixed; }
+      body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(135deg, rgba(2,16,10,.96), rgba(12,24,33,.88) 48%, rgba(42,14,50,.9)); }
+      #board { display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); grid-template-rows: repeat(24, minmax(0, 1fr)); row-gap: .5rem; width: 100%; min-height: 540px; position: relative; }
+      .card-full-art { padding: 0 !important; border-radius: 1rem; background-size: cover; background-position: center; }
+      .card-full-art > * { display: none !important; }
+      #hand-area { min-height: 10rem; }
+      .pile-panel { z-index: 10; min-width: 0; overflow: hidden; }
+      .pile-panel ul { scrollbar-width: thin; }
+      #card-modal::backdrop { background: rgba(17, 24, 39, .58); backdrop-filter: blur(2px); }
+      @media (max-width: 480px) and (orientation: portrait) { #board { display: flex; flex-direction: column; min-height: auto; gap: .75rem; } #hand-area { min-height: 9rem; } .zone-parent { display: flex; flex-direction: column; grid-column: unset !important; grid-row: unset !important; } .pile-panel { grid-column: unset !important; grid-row: unset !important; min-height: 9rem; } }
+      @media (orientation: landscape) and (max-height: 500px) { #board { display: flex; flex-wrap: wrap; min-height: auto; gap: .75rem; } .pile-panel { grid-column: unset !important; grid-row: unset !important; flex: 1 1 calc(50% - .75rem); } .pile-group { display: flex; flex-wrap: wrap; gap: .75rem; flex: 1 1 100%; } }
+    </style>
+  </head>
+  <body class="min-h-screen font-sans text-gray-900 antialiased">
+    <div class="min-h-screen lg:flex">
+      <aside class="border-b border-gray-200 bg-white lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-[290px] lg:flex-col lg:border-b-0 lg:border-r">
+        <div class="flex h-[72px] items-center gap-3 px-5 lg:px-7">
+          <span class="flex h-10 items-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 text-sm text-white shadow-sm" aria-label="Game board, cards, and twenty-sided die">
+            <i class="fa-solid fa-game-board" aria-hidden="true"></i>
+            <i class="fa-solid fa-cards-blank" aria-hidden="true"></i>
+            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+          </span>
+          <p class="text-lg font-bold leading-none tracking-tight">BYOG</p>
+        </div>
+        <nav class="flex gap-2 overflow-x-auto px-4 pb-4 lg:block lg:space-y-1 lg:px-5 lg:pt-5" aria-label="Main navigation">
+          <p class="mb-3 hidden px-3 text-xs font-medium uppercase tracking-wider text-gray-400 lg:block">Menu</p>
+          <a href="#board-section" class="flex shrink-0 items-center gap-3 rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-medium text-brand-500">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+            Game board
+          </a>
+          <a href="#actions" class="flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100">
+            <svg class="h-5 w-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>
+            Card actions
+          </a>
+          <div class="flex shrink-0 items-end gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 lg:mt-2 lg:block lg:space-y-2" aria-label="Player menu">
+            <label class="block min-w-32 flex-1">
+              <span class="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">Game instance</span>
+              <select id="game-select" class="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" aria-label="Active game instance"></select>
+            </label>
+            <div class="flex gap-2 lg:grid lg:grid-cols-2">
+              <button id="new-game" type="button" class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100" aria-label="Create new game instance">+ New game</button>
+              <button id="delete-game" type="button" class="rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50" aria-label="Delete current game instance">Delete game</button>
+            </div>
+            <div class="border-t border-gray-200 pt-2"></div>
+            <label class="block min-w-32 flex-1">
+              <span class="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">View board</span>
+              <select id="player-select" class="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" aria-label="Board player" title="Use left and right brackets to switch players"></select>
+              <span class="mt-1 block text-[10px] text-gray-400">[ ] players · ↑ ↓ board pieces</span>
+            </label>
+            <div class="flex gap-2 lg:grid lg:grid-cols-2">
+              <button id="rename-player" type="button" class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-500 transition hover:border-brand-300 hover:text-brand-600">Rename</button>
+              <button id="add-player" type="button" class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-500 transition hover:border-brand-300 hover:text-brand-600" aria-label="Add player">+ Add</button>
+            </div>
+          </div>
+        </nav>
+        <section class="border-t border-gray-200 px-4 py-4 lg:min-h-0 lg:flex-1 lg:px-5" aria-labelledby="change-history-title">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div><p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Game activity</p><h2 id="change-history-title" class="mt-0.5 text-sm font-semibold text-gray-800">Activity by turn</h2></div>
+            <button id="undo-btn" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" disabled><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo</button>
+          </div>
+          <ol id="change-history" class="max-h-44 space-y-2 overflow-y-auto pr-1 text-xs lg:max-h-none lg:h-[calc(100%-3rem)]" aria-live="polite"><li class="italic text-gray-400">No saved changes yet.</li></ol>
+        </section>
+      </aside>
+
+      <div class="min-w-0 flex-1 lg:ml-[290px]">
+        <header class="sticky top-0 z-30 flex min-h-[72px] items-center justify-between border-b border-gray-200 bg-white/95 px-4 backdrop-blur md:px-6">
+          <div><p class="text-xs font-medium text-emerald-700">Commander / Teenage Mutant Ninja Turtles</p><h1 class="mt-0.5 text-xl font-semibold text-gray-900">Turtle Power</h1></div>
+          <div class="flex items-center gap-2">
+            <span id="turn-label" class="hidden text-xs font-semibold text-gray-500 sm:inline">Turn 1</span>
+            <button id="create-card-button" type="button" class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 transition hover:bg-brand-100"><i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create card</button>
+            <button id="end-turn" type="button" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40" disabled>End turn</button>
+            <span id="status" role="status" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm"><span class="h-2 w-2 rounded-full bg-amber-400"></span> Loading…</span>
+          </div>
+        </header>
+
+        <main id="player-board-panel" aria-label="Active player board" class="mx-auto max-w-[1600px] p-4 md:p-6">
+          <section class="mb-6 grid gap-4 sm:grid-cols-3" aria-label="Game summary">
+            <article class="min-w-0 rounded-2xl border border-cyan-200 bg-white p-5 shadow-theme sm:col-span-2"><div class="mb-3 flex items-center justify-between"><div><p id="hand-owner-label" class="text-sm font-medium text-gray-500">Player 1's hand</p><p id="hand-summary-count" class="mt-1 text-xs text-gray-400">0 cards</p></div><span class="rounded-lg bg-cyan-50 p-2 text-cyan-600">▤</span></div><div id="hand-area" class="min-w-0 overflow-hidden rounded-xl border border-cyan-200 bg-cyan-50/40 p-3"></div></article>
+            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme">
+              <div class="flex items-start justify-between gap-3"><label class="min-w-0 flex-1"><span id="active-player-label" class="mb-1 block text-xs font-medium text-gray-500">Token pools for Player 1</span><select id="token-pool-player-select" class="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" aria-label="Token pools player"></select></label><span class="mt-5 rounded-lg bg-rose-50 p-2 text-rose-500" aria-hidden="true"><i class="fa-solid fa-heart"></i></span></div>
+              <div id="player-tokens" class="mt-3 flex max-h-40 min-h-8 flex-col items-start gap-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1" aria-label="Player token pools"><span class="text-sm text-gray-400">Loading life…</span></div>
+              <p class="mt-1 text-xs text-gray-400">Adjust your current life total</p>
+            </article>
+          </section>
+
+          <section id="board-section" class="scroll-mt-24 rounded-2xl border border-gray-200 bg-white shadow-theme">
+            <div class="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6"><div><h2 id="zones-owner-label" class="text-base font-semibold">Player 1 zones</h2><p id="zones-owner-description" class="mt-1 text-sm text-gray-500">Showing Player 1's piles and token counts.</p></div><span class="w-fit rounded-full bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700">Player-owned zones</span></div>
+            <div class="space-y-4 p-3 md:p-5">
+              <div>
+                <p class="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-gray-400">Playfield</p>
+                <div id="board" class="rounded-xl border border-gray-200 bg-gray-50 p-2 md:p-3"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="actions" class="mt-6 scroll-mt-24 rounded-2xl border border-gray-200 bg-white shadow-theme">
+            <div class="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between md:px-6">
+              <div><p class="text-xs font-medium uppercase tracking-wider text-gray-400">Actions</p><h2 class="mt-1 text-base font-semibold">Manage cards</h2><p class="mt-1 text-sm text-gray-500">Choose a card and update the game state.</p></div>
+              <button id="move-menu-btn" type="button" aria-expanded="false" aria-controls="move-menu" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-50"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>Move card <span id="move-chevron" class="transition-transform" aria-hidden="true">⌄</span></button>
+            </div>
+            <div id="move-menu" class="hidden border-t border-gray-200 bg-gray-50/70 p-5 md:p-6">
+              <div class="grid gap-4 lg:grid-cols-[1fr_1.35fr_1fr_auto] lg:items-end">
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">From pile</span><select id="source-pile" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled></select></label>
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">Find a card</span><input id="card-search" type="search" placeholder="Search by name, type, or ID…" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled /></label>
+                <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700">Move to</span><select id="target-pile" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50 disabled:bg-gray-100" disabled></select></label>
+                <button id="move-btn" class="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40" disabled>Confirm move</button>
+              </div>
+              <p id="selection" class="mt-3 text-xs text-gray-500">Select a card from the chosen pile on the board.</p>
+            </div>
+          </section>
+
+          <section class="mt-6 min-w-0 rounded-2xl border border-violet-200 bg-white p-5 shadow-theme" aria-label="Opponent hands">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div><p id="opponent-hand-label" class="text-sm font-medium text-gray-500">Opponent hands</p><p id="opponent-hand-count" class="mt-1 text-xs text-gray-400">0 cards · hidden</p></div>
+              <div class="flex flex-wrap items-center gap-3">
+                <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-600"><input id="show-opponent-hand" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" /> Show opponent hands</label>
+                <button id="collapse-opponent-hands" type="button" aria-expanded="true" aria-controls="opponent-hand-area" class="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"><span data-collapse-label>Collapse</span><span data-collapse-chevron class="transition-transform" aria-hidden="true">⌃</span></button>
+              </div>
+            </div>
+            <div id="opponent-hand-area" class="grid min-h-24 gap-3 rounded-xl border border-violet-200 bg-violet-50/40 p-3 md:grid-cols-2" aria-live="polite"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog id="create-card-dialog" aria-labelledby="create-card-title" class="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-2xl border-0 bg-white p-0 shadow-2xl">
+      <form id="create-card-form">
+        <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+          <div><p class="text-xs font-medium uppercase tracking-wider text-brand-500">New game piece</p><h2 id="create-card-title" class="mt-1 text-lg font-semibold text-gray-900">Create a card</h2></div>
+          <button id="create-card-close" type="button" aria-label="Close card creator" class="grid h-9 w-9 place-items-center rounded-lg text-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">×</button>
+        </div>
+        <div class="grid gap-4 p-5 sm:grid-cols-2">
+          <label class="sm:col-span-2"><span class="mb-1.5 block text-sm font-medium text-gray-700">Name</span><input id="create-card-name" required maxlength="80" class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50" placeholder="Ninja Token" /></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700">Type</span><select id="create-card-type" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50"><option value="creature">Creature</option><option value="artifact">Artifact</option><option value="enchantment">Enchantment</option><option value="land">Land</option><option value="instant">Instant</option><option value="sorcery">Sorcery</option></select></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700">Put in</span><select id="create-card-pile" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50"></select></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700">Offense</span><input id="create-card-offense" maxlength="12" class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50" placeholder="1" /></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700">Defense</span><input id="create-card-defense" maxlength="12" class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50" placeholder="1" /></label>
+          <label class="sm:col-span-2"><span class="mb-1.5 block text-sm font-medium text-gray-700">Card text</span><textarea id="create-card-text" rows="4" maxlength="1000" class="w-full resize-y rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-50" placeholder="Describe abilities and rules text…"></textarea></label>
+        </div>
+        <div class="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4"><button id="create-card-cancel" type="button" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button><button id="create-card-submit" type="submit" class="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-600">Create card</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="card-modal" aria-labelledby="card-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-2xl border-0 bg-white p-0 shadow-2xl">
+      <div class="flex items-start justify-between border-b border-gray-200 px-5 py-4 sm:px-6">
+        <div>
+          <p id="card-modal-pile" class="text-xs font-medium uppercase tracking-wider text-gray-400"></p>
+          <h2 id="card-modal-title" class="mt-1 text-lg font-semibold text-gray-900"></h2>
+        </div>
+        <button id="card-modal-close" type="button" aria-label="Close card details" class="grid h-9 w-9 place-items-center rounded-lg text-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">×</button>
+      </div>
+
+      <div class="p-5 sm:p-6">
+        <div class="flex items-center justify-center gap-2 sm:gap-4">
+          <button id="card-modal-previous" type="button" aria-label="View previous card" title="Previous card (Left arrow)" class="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-gray-300 bg-white text-xl text-gray-700 shadow-sm transition hover:border-brand-300 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-30">←</button>
+          <article id="card-view" class="aspect-[5/7] w-full max-w-[250px] overflow-hidden rounded-2xl border border-gray-300 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-4 text-white shadow-xl transition-transform duration-300">
+            <div class="flex h-full flex-col rounded-xl border border-white/15 bg-black/55 p-4 backdrop-blur-sm">
+            <div class="flex items-start justify-between gap-3 border-b border-white/15 pb-3">
+              <h3 id="card-view-name" class="text-lg font-semibold leading-tight"></h3>
+              <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-xs">🐢</span>
+            </div>
+            <div class="my-4 grid flex-1 place-items-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-500/40 to-violet-500/20">
+              <span class="text-5xl text-white/80" aria-hidden="true">✦</span>
+            </div>
+            <div class="rounded-lg bg-black/20 p-3">
+              <p id="card-view-type" class="text-sm font-medium"></p>
+              <p id="card-view-id" class="mt-1 break-all text-[11px] text-white/55"></p>
+            </div>
+          </div>
+          </article>
+          <button id="card-modal-next" type="button" aria-label="View next card" title="Next card (Right arrow)" class="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-gray-300 bg-white text-xl text-gray-700 shadow-sm transition hover:border-brand-300 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-30">→</button>
+        </div>
+        <div class="mx-auto mt-5 flex max-w-[320px] items-center justify-center gap-3">
+          <button id="card-modal-tap" type="button" title="Tap or untap (T)" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Tap <span class="ml-1 text-xs text-gray-400">T</span></button>
+          <button id="card-modal-flip" type="button" class="hidden rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100">Show back</button>
+          <button id="card-modal-bottom" type="button" class="hidden rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100">Move to bottom</button>
+          <div class="inline-flex items-center overflow-hidden rounded-lg border border-gray-300 bg-white" aria-label="Card counters">
+            <button id="card-counter-remove" type="button" aria-label="Remove counter" class="grid h-10 w-10 place-items-center text-lg text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35">−</button>
+            <span id="card-counter-count" class="min-w-12 border-x border-gray-200 px-3 text-center text-sm font-semibold text-gray-800">0</span>
+            <button id="card-counter-add" type="button" aria-label="Add counter" class="grid h-10 w-10 place-items-center text-lg text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200 bg-gray-50 px-5 py-4 sm:px-6">
+        <label for="card-modal-target" class="mb-1.5 block text-sm font-medium text-gray-700">Move to</label>
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <select id="card-modal-target" class="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50"></select>
+          <button id="card-modal-move" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40">Move card <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="opponent-modal" aria-labelledby="opponent-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-md overflow-hidden rounded-2xl border-0 bg-white p-0 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <div><p class="text-xs font-medium uppercase tracking-wider text-violet-500">Opponent</p><div class="mt-1 flex items-center gap-2"><h2 id="opponent-modal-title" class="text-lg font-semibold text-gray-900"></h2><button id="opponent-rename" type="button" class="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-violet-600">Rename</button></div></div>
+        <button id="opponent-modal-close" type="button" aria-label="Close opponent details" class="grid h-9 w-9 place-items-center rounded-lg text-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">×</button>
+      </div>
+      <div class="p-5">
+        <p class="mb-3 text-sm text-gray-500">Adjust this opponent's token pools.</p>
+        <div id="opponent-token-pools" class="max-h-[60vh] space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1"></div>
+      </div>
+    </dialog>
+    <script type="module" src="./app.js?v=37"></script>
+  </body>
+</html>

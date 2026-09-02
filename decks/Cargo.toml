@@ -1,0 +1,12 @@
+[package]
+name = "decks"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+csv = "1.3"
+engine = { path = "../engine", version = "0.1.0" }
+token-pools = { path = "../token-pools", version = "0.1.0" }

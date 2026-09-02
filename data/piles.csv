@@ -1,0 +1,11 @@
+id,name,deck_id,zone_id,x,y,associated_piles,visible,role
+commander_pile,Commander,default,command_zone,0,0,,true,commander
+deck,Deck,default,deck_zone,0,4,discard,false,draw
+main_board,Main Board,default,main_board_zone,0,0,,true,play_default
+lands,Lands,default,lands_zone,0,0,,true,
+artifacts,Artifacts,default,artifacts_zone,0,0,,true,
+enchantments,Enchantments,default,enchantments_zone,0,0,,true,
+creatures,Creatures,default,creatures_zone,0,0,,true,
+discard,Discard,default,discard_zone,16,4,deck,true,discard
+exile,Exile,default,exile_zone,24,4,,true,exile
+hand,Hand,default,hand,0,28,,true,hand

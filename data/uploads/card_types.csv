@@ -1,0 +1,5 @@
+game_id,id,name,description,background_image,background_color,icon,back_logo
+byog,creature,Creature,A permanent creature card.,,,,
+byog,land,Land,A land card.,,,,
+byog,artifact,Artifact,A permanent artifact card.,,,,
+byog,enchantment,Enchantment,A permanent enchantment card.,,,,

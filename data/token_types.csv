@@ -1,0 +1,8 @@
+game_id,id,name,description,icon,icon_color,background
+byog,life,Life,Player life total,fa-solid fa-heart,,
+byog,commander-damage,Commander Damage,Commander damage remaining,fa-solid fa-helmet-battle,,
+byog,red-mana,Red Mana,Red mana pool,fa-solid fa-mountain,red,
+byog,black-mana,Black Mana,Black mana pool,fa-solid fa-skull,black,
+byog,blue-mana,Blue Mana,Blue mana pool,fa-solid fa-droplet,blue,
+byog,green-mana,Green Mana,Green mana pool,fa-solid fa-tree,green,
+byog,white-mana,White Mana,White mana pool,fa-solid fa-sun,yellow,

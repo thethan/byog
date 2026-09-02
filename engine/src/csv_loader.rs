@@ -1,12 +1,12 @@
+use crate::card::Card;
+use crate::engine::EngineError;
+use cards::cards::CardVisual;
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
+use token_pools::TokenPool;
 
-use crate::card::{Card, CardType};
-use crate::engine::EngineError;
-use crate::token_pool::TokenPool;
-
-const DEFAULT_CARDS_CSV_PATH: &str = "data/cards.csv";
+const DEFAULT_CARDS_CSV_PATH: &str = "data/players/player-1/cards.csv";
 
 pub fn cards_csv_path() -> PathBuf {
     env::var("CARDS_CSV_PATH")
@@ -17,7 +17,10 @@ pub fn cards_csv_path() -> PathBuf {
 pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
     let path = path.map(PathBuf::from).unwrap_or_else(cards_csv_path);
 
-    let mut reader = csv::Reader::from_path(&path).map_err(EngineError::Csv)?;
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_path(&path)
+        .map_err(EngineError::Csv)?;
     let headers = reader
         .headers()
         .map_err(EngineError::Csv)?
@@ -52,9 +55,26 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
 
         cards.push(Card {
             id,
+            game_id: String::new(),
             name,
-            card_type: CardType::parse(&card_type_raw),
-            mana_cost: optional_value(&record, headers.get("mana_cost").copied()),
+            card_type_id: card_type_id(&card_type_raw),
+            description: None,
+            visual: CardVisual::Generated {
+                image: optional_value(&record, headers.get("image").copied()),
+                background_image: optional_value(&record, headers.get("background_image").copied()),
+                background_color: optional_value(&record, headers.get("background_color").copied()),
+                icon: None,
+            },
+            back_logo: None,
+            back_image: optional_value(&record, headers.get("back_image").copied()),
+            cost: None, // todo add this back in.
+            mana: optional_value(
+                &record,
+                headers
+                    .get("cost")
+                    .copied()
+                    .or_else(|| headers.get("mana").copied()),
+            ),
             colors: optional_value(&record, headers.get("colors").copied()),
             oracle_text: optional_value(&record, headers.get("oracle_text").copied()),
             power: optional_value(&record, headers.get("power").copied()),
@@ -66,10 +86,15 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
                 headers.get("token_pools").copied(),
                 line_idx + 2,
             )?,
+            starting_pile: optional_value(&record, headers.get("starting_pile").copied()),
         });
     }
 
     Ok(cards)
+}
+
+fn card_type_id(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace(' ', "-")
 }
 
 fn required_value(
@@ -143,85 +168,9 @@ mod tests {
         assert_eq!(cards.len(), 2);
         assert_eq!(cards[0].id, "1");
         assert_eq!(cards[0].name, "Sol Ring");
-        assert!(cards[0].is_commander);
-        assert!(!cards[0].is_partner);
         assert_eq!(cards[0].token_pools[0].token(), "fa-bolt");
-        assert_eq!(cards[1].mana_cost, None);
+        assert_eq!(cards[1].mana, None);
         assert_eq!(cards[1].oracle_text, None);
         assert!(cards[1].token_pools.is_empty());
     }
-}
-
-
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-pub struct CardCsvRow {
-    pub game_id: String,
-    pub id: String,
-    pub name: String,
-    pub card_type_id: String,
-
-    #[serde(default)]
-    pub description: Option<String>,
-
-    #[serde(default)]
-    pub cost: Option<String>,
-
-    /// Artwork displayed within the generated card layout.
-    #[serde(default)]
-    pub image: Option<String>,
-
-    /// Overrides the inherited card-type background.
-    #[serde(default)]
-    pub background_image: Option<String>,
-
-    /// Complete pre-rendered card. Hides generated content.
-    #[serde(default)]
-    pub full_image: Option<String>,
-
-    #[serde(default)]
-    pub background_color: Option<String>,
-
-    #[serde(default)]
-    pub icon: Option<String>,
-
-    #[serde(default)]
-    pub back_logo: Option<String>,
-}
-
-impl CardCsvRow {
-    pub fn into_card(self) -> Result<Card, String> {
-        let visual = match normalize_optional(self.full_image) {
-            Some(image) => CardVisual::FullImage { image },
-
-            None => CardVisual::Generated {
-                image: normalize_optional(self.image),
-                background_image: normalize_optional(
-                    self.background_image,
-                ),
-                background_color: normalize_optional(
-                    self.background_color,
-                ),
-                icon: normalize_optional(self.icon),
-            },
-        };
-
-        Ok(Card {
-            game_id: self.game_id,
-            id: self.id,
-            name: self.name,
-            card_type_id: self.card_type_id,
-            description: normalize_optional(self.description),
-            cost: parse_card_cost(self.cost.as_deref())?,
-            visual,
-            back_logo: normalize_optional(self.back_logo),
-        })
-    }
-}
-
-fn normalize_optional(value: Option<String>) -> Option<String> {
-    value
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
