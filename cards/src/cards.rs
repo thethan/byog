@@ -36,6 +36,8 @@ pub struct Card<T = ()> {
     pub cost: Option<CardCost>,
     pub visual: CardVisual,
     pub back_logo: Option<String>,
+    /// Optional reverse-face artwork. Gameplay attributes are shared with the front.
+    pub back_image: Option<String>,
     /// Mana requirement. Resource names can reference token type ids used by pools.
     pub mana: Option<String>,
     pub colors: Option<String>,
@@ -341,6 +343,7 @@ pub fn ingest_cards_csv(
                 cost: parse_card_cost(values.get("cost").map_or("", String::as_str), row)?,
                 visual,
                 back_logo: optional(values.get("back_logo")),
+                back_image: optional(values.get("back_image")),
                 mana: None,
                 colors: None,
                 oracle_text: None,

@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 
 use cards::cards::CardVisual;
 use decks::{Pile, ZoneLayout, parse_piles_csv, parse_zones_csv};
-use engine::{Card, CardEngine, DEFAULT_PLAYER_ID, EngineError, Zone};
+use engine::{Card, CardEngine, DEFAULT_PLAYER_ID, EngineError};
 use token_pools::{TokenPool, TokenPoolOwner, ingest_token_pools_csv, ingest_token_types_csv};
 
 #[wasm_bindgen]
@@ -29,47 +29,11 @@ fn install_panic_logger() {
     });
 }
 
-const DEFAULT_CARDS_CSV: &str = include_str!("../data/cards.csv");
+const DEFAULT_CARDS_CSV: &str = include_str!("../data/players/player-1/cards.csv");
 const DEFAULT_PILES_CSV: &str = include_str!("../data/piles.csv");
 const DEFAULT_ZONES_CSV: &str = include_str!("../data/zones.csv");
 const DEFAULT_TOKEN_TYPES_CSV: &str = include_str!("../data/token_types.csv");
 const DEFAULT_TOKEN_POOLS_CSV: &str = include_str!("../data/token_pools.csv");
-
-/// Maps a pile id string to the corresponding `Zone` variant.
-fn pile_id_to_zone(pile_id: &str) -> Option<Zone> {
-    match pile_id {
-        "commander_pile" => Some(Zone::CommanderPile),
-        "main_stack" => Some(Zone::MainStack),
-        "hand" => Some(Zone::Hand),
-        "lands" => Some(Zone::Lands),
-        "deck" => Some(Zone::Deck),
-        "discard" => Some(Zone::Discard),
-        "exile" => Some(Zone::Exile),
-        "artifacts" => Some(Zone::Artifacts),
-        "enchantments" => Some(Zone::Enchantments),
-        "creatures" => Some(Zone::Creatures),
-        "battlefield" | "main_zone" => Some(Zone::Battlefield),
-        _ => None,
-    }
-}
-
-/// Maps board-layout zone ids to the engine zone that owns their token pools.
-fn layout_id_to_zone(zone_id: &str) -> Option<Zone> {
-    match zone_id {
-        "command_zone" => Some(Zone::CommanderPile),
-        "deck_zone" => Some(Zone::Deck),
-        "stack_zone" => Some(Zone::MainStack),
-        "discard_zone" => Some(Zone::Discard),
-        "exile_zone" => Some(Zone::Exile),
-        "battlefield" | "main_zone" => Some(Zone::Battlefield),
-        "lands_zone" => Some(Zone::Lands),
-        "artifacts_zone" => Some(Zone::Artifacts),
-        "enchantments_zone" => Some(Zone::Enchantments),
-        "creatures_zone" => Some(Zone::Creatures),
-        "hand" => Some(Zone::Hand),
-        id => Zone::from_pile_id(id),
-    }
-}
 
 #[wasm_bindgen]
 pub struct WasmGame {
@@ -82,8 +46,14 @@ pub struct WasmGame {
 impl WasmGame {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<WasmGame, JsValue> {
+        Self::from_cards_csv(DEFAULT_CARDS_CSV)
+    }
+
+    /// Creates one player's isolated game state from that player's cards.csv.
+    #[wasm_bindgen(js_name = fromCardsCsv)]
+    pub fn from_cards_csv(raw_csv: &str) -> Result<WasmGame, JsValue> {
         install_panic_logger();
-        let mut cards = load_cards_from_embedded_csv(DEFAULT_CARDS_CSV).map_err(js_error)?;
+        let mut cards = load_cards_from_embedded_csv(raw_csv).map_err(js_error)?;
         if cards.is_empty() {
             return Err(js_error("No cards found in embedded CSV"));
         }
@@ -119,36 +89,64 @@ impl WasmGame {
                     .map_err(js_error)?,
                 );
             }
+            if card.back_image.is_some()
+                && !card.token_pools.iter().any(|pool| pool.id == "flipped")
+            {
+                card.token_pools.push(
+                    TokenPool::configured(
+                        "flipped",
+                        "Back face",
+                        "fa-solid fa-repeat",
+                        None,
+                        0,
+                        Some(0),
+                        Some(0),
+                        false,
+                    )
+                    .map_err(js_error)?,
+                );
+            }
         }
 
         let piles = parse_piles_csv(DEFAULT_PILES_CSV).map_err(js_error)?;
 
         let zone_layouts = parse_zones_csv(DEFAULT_ZONES_CSV).map_err(js_error)?;
 
-        // Group cards by starting_pile; fall back to main_stack for non-commanders,
-        // commander_pile for commanders with no starting_pile.
-        let mut zone_cards: std::collections::HashMap<Zone, Vec<String>> =
-            Zone::ALL.iter().map(|z| (*z, Vec::new())).collect();
+        let pile_ids = piles.iter().map(|pile| pile.id.clone()).collect::<Vec<_>>();
+        let commander_pile = piles
+            .iter()
+            .find(|pile| pile.role.as_deref() == Some("commander"))
+            .map(|pile| pile.id.as_str());
+        let draw_pile = piles
+            .iter()
+            .find(|pile| pile.role.as_deref() == Some("draw"))
+            .map(|pile| pile.id.as_str())
+            .ok_or_else(|| js_error("piles CSV must define a pile with role 'draw'"))?;
+        let mut zone_cards: std::collections::HashMap<String, Vec<String>> = pile_ids
+            .iter()
+            .cloned()
+            .map(|id| (id, Vec::new()))
+            .collect();
 
         for card in &cards {
             let target_zone = card
                 .starting_pile
                 .as_deref()
-                .and_then(pile_id_to_zone)
-                .unwrap_or_else(|| {
-                    if card.is_commander {
-                        Zone::CommanderPile
-                    } else {
-                        Zone::MainStack
-                    }
-                });
+                .filter(|id| zone_cards.contains_key(*id))
+                .or(if card.is_commander {
+                    commander_pile
+                } else {
+                    None
+                })
+                .unwrap_or(draw_pile)
+                .to_string();
             zone_cards
                 .entry(target_zone)
                 .or_default()
                 .push(card.id.clone());
         }
 
-        let mut engine = CardEngine::new(cards, None);
+        let mut engine = CardEngine::new(cards, pile_ids, None);
         let token_types = ingest_token_types_csv(DEFAULT_TOKEN_TYPES_CSV).map_err(js_error)?;
         let definitions =
             ingest_token_pools_csv(DEFAULT_TOKEN_POOLS_CSV, &token_types).map_err(js_error)?;
@@ -156,7 +154,7 @@ impl WasmGame {
             .iter()
             .filter(|definition| definition.owner == TokenPoolOwner::Player)
             .map(|definition| definition.pool.clone())
-            .collect();
+            .collect::<Vec<_>>();
         engine.state.players.insert(
             DEFAULT_PLAYER_ID.to_string(),
             engine::Player::with_token_pools(DEFAULT_PLAYER_ID, "Player 1", player_pools)
@@ -176,8 +174,18 @@ impl WasmGame {
                     let zone = definition
                         .owner_id
                         .as_deref()
-                        .and_then(pile_id_to_zone)
-                        .unwrap_or(Zone::Battlefield);
+                        .or_else(|| {
+                            piles
+                                .iter()
+                                .find(|pile| pile.role.as_deref() == Some("play_default"))
+                                .map(|pile| pile.id.as_str())
+                        })
+                        .ok_or_else(|| {
+                            js_error(format!(
+                                "Pool '{}' needs owner_id or a play_default pile",
+                                definition.pool.id
+                            ))
+                        })?;
                     engine
                         .add_zone_token_pool(zone, definition.pool)
                         .map_err(js_error)?;
@@ -187,21 +195,17 @@ impl WasmGame {
         }
         for layout in &zone_layouts {
             if !layout.token_pools.is_empty() {
-                let zone = layout_id_to_zone(&layout.id).ok_or_else(|| {
-                    js_error(format!(
-                        "Zone '{}' defines token pools but has no engine zone mapping",
-                        layout.id
-                    ))
-                })?;
-                engine
-                    .set_zone_token_pools(zone, layout.token_pools.clone())
-                    .map_err(js_error)?;
+                for pile in piles.iter().filter(|pile| pile.zone_id == layout.id) {
+                    engine
+                        .set_zone_token_pools(&pile.id, layout.token_pools.clone())
+                        .map_err(js_error)?;
+                }
             }
         }
 
         for (zone, ids) in zone_cards {
             if !ids.is_empty() {
-                engine.state.set_zone_cards(zone, ids).map_err(js_error)?;
+                engine.state.set_zone_cards(&zone, ids).map_err(js_error)?;
             }
         }
 
@@ -213,6 +217,108 @@ impl WasmGame {
     }
 
     pub fn state_proto(&self) -> Result<Vec<u8>, JsValue> {
+        self.snapshot_proto().map_err(js_error)
+    }
+
+    /// Restores mutable game state from a previously saved snapshot.
+    /// Card definitions still come from the current deck CSV, so stale or corrupt
+    /// snapshots cannot silently add, remove, or duplicate cards.
+    pub fn restore_state_proto(&mut self, bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+        let snapshot = GameStateSnapshotProto::decode(bytes)
+            .map_err(|err| js_error(format!("Failed to decode saved game state: {err}")))?;
+        let known_piles = self
+            .piles
+            .iter()
+            .map(|pile| pile.id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        let known_cards = self
+            .engine
+            .state
+            .cards
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        let mut restored_state = self.engine.state.clone();
+        let mut restored_zones = std::collections::HashMap::new();
+        let mut restored_cards = std::collections::HashSet::new();
+
+        for zone in snapshot.zones {
+            if !known_piles.contains(zone.id.as_str())
+                || restored_zones.contains_key(zone.id.as_str())
+            {
+                return Err(js_error(format!(
+                    "Saved game state contains an unknown or duplicate pile '{}'",
+                    zone.id
+                )));
+            }
+            restore_token_pool_views(
+                restored_state
+                    .zone_token_pools
+                    .get_mut(&zone.id)
+                    .ok_or_else(|| js_error(format!("Unknown saved pile '{}'", zone.id)))?,
+                zone.token_pools,
+                &format!("pile '{}'", zone.id),
+            )
+            .map_err(js_error)?;
+            let mut card_ids = Vec::with_capacity(zone.cards.len());
+            for card in zone.cards {
+                if !known_cards.contains(card.id.as_str())
+                    || !restored_cards.insert(card.id.clone())
+                {
+                    return Err(js_error(format!(
+                        "Saved game state contains an unknown or duplicate card '{}'",
+                        card.id
+                    )));
+                }
+                restore_token_pool_views(
+                    restored_state
+                        .card_token_pools
+                        .entry(card.id.clone())
+                        .or_default(),
+                    card.token_pools,
+                    &format!("card '{}'", card.id),
+                )
+                .map_err(js_error)?;
+                card_ids.push(card.id);
+            }
+            restored_zones.insert(zone.id, card_ids);
+        }
+
+        if restored_zones.len() != known_piles.len() || restored_cards.len() != known_cards.len() {
+            return Err(js_error(
+                "Saved game state does not match the current deck and pile configuration",
+            ));
+        }
+
+        let mut restored_players = std::collections::HashSet::new();
+        for player in snapshot.players {
+            if !restored_players.insert(player.id.clone()) {
+                return Err(js_error(format!(
+                    "Saved game state contains duplicate player '{}'",
+                    player.id
+                )));
+            }
+            let restored_player = restored_state.players.get_mut(&player.id).ok_or_else(|| {
+                js_error(format!(
+                    "Saved game state contains unknown player '{}'",
+                    player.id
+                ))
+            })?;
+            restore_token_pool_views(
+                &mut restored_player.token_pools,
+                player.token_pools,
+                &format!("player '{}'", player.id),
+            )
+            .map_err(js_error)?;
+            restored_player.name = player.name;
+        }
+        if restored_players.len() != restored_state.players.len() {
+            return Err(js_error("Saved game state does not contain every player"));
+        }
+
+        // Validation above is complete, so applying the replacement is atomic.
+        restored_state.zones = restored_zones;
+        self.engine.state = restored_state;
         self.snapshot_proto().map_err(js_error)
     }
 
@@ -230,6 +336,8 @@ impl WasmGame {
                 height: z.height as u32,
                 scope: z.scope.as_str().to_string(),
                 parent_zone: z.parent_zone.clone(),
+                allowed_card_types: z.allowed_card_types.clone(),
+                max_cards: z.max_cards.map(|value| value as u32),
             })
             .collect();
 
@@ -244,6 +352,7 @@ impl WasmGame {
                 y: p.y as u32,
                 associated_piles: p.associated_piles.clone(),
                 visible: p.visible,
+                role: p.role.clone(),
             })
             .collect();
 
@@ -256,51 +365,44 @@ impl WasmGame {
     }
 
     pub fn draw(&mut self) -> Result<Vec<u8>, JsValue> {
-        self.engine.draw().map_err(js_error)?;
+        let draw = self.pile_for_role("draw").map_err(js_error)?.to_string();
+        let hand = self.pile_for_role("hand").map_err(js_error)?.to_string();
+        self.engine.draw(&draw, &hand).map_err(js_error)?;
         self.state_proto()
     }
 
     pub fn auto_play_first_hand_card(&mut self) -> Result<Vec<u8>, JsValue> {
-        let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
+        let hand = self.pile_for_role("hand").map_err(js_error)?.to_string();
+        let Some(card_id) = self.engine.state.zone_cards(&hand).first().cloned() else {
             return self.state_proto();
         };
-
-        let card_type = self
-            .engine
-            .state
-            .card_by_id(&card_id)
+        let destination = self
+            .destination_for_card(&card_id)
             .map_err(js_error)?
-            .card_type_id
-            .clone();
-
-        match card_type.trim().to_ascii_lowercase().as_str() {
-            "land" => self.engine.play_land(&card_id).map_err(js_error)?,
-            "artifact" | "enchantment" | "creature" => self
-                .engine
-                .cast_to_battlefield(&card_id)
-                .map_err(js_error)?,
-            _ => self
-                .engine
-                .discard(Zone::Hand, &card_id)
-                .map_err(js_error)?,
-        };
+            .to_string();
+        self.engine
+            .play_card(&hand, &destination, &card_id)
+            .map_err(js_error)?;
 
         self.state_proto()
     }
 
     pub fn discard_first_hand_card(&mut self) -> Result<Vec<u8>, JsValue> {
-        let Some(card_id) = self.engine.state.zone_cards(Zone::Hand).first().cloned() else {
+        let hand = self.pile_for_role("hand").map_err(js_error)?.to_string();
+        let discard = self.pile_for_role("discard").map_err(js_error)?.to_string();
+        let Some(card_id) = self.engine.state.zone_cards(&hand).first().cloned() else {
             return self.state_proto();
         };
         self.engine
-            .discard(Zone::Hand, &card_id)
+            .discard(&hand, &discard, &card_id)
             .map_err(js_error)?;
         self.state_proto()
     }
 
     pub fn add_hand_energy(&mut self, amount: u32) -> Result<Vec<u8>, JsValue> {
+        let hand = self.pile_for_role("hand").map_err(js_error)?.to_string();
         self.engine
-            .add_tokens_to_zone_pool(Zone::Hand, "energy", amount)
+            .add_tokens_to_zone_pool(&hand, "energy", amount)
             .map_err(js_error)?;
         self.state_proto()
     }
@@ -311,10 +413,212 @@ impl WasmGame {
         from_pile: &str,
         to_pile: &str,
     ) -> Result<Vec<u8>, JsValue> {
+        self.validate_card_destination(card_id, to_pile)
+            .map_err(js_error)?;
         self.engine
             .move_card_between_piles(from_pile, to_pile, card_id)
             .map_err(js_error)?;
         self.state_proto()
+    }
+
+    /// Creates a card during play and places it directly into a configured pile.
+    #[wasm_bindgen(js_name = createCard)]
+    pub fn create_card(
+        &mut self,
+        id: &str,
+        name: &str,
+        card_type: &str,
+        text: &str,
+        offense: &str,
+        defense: &str,
+        to_pile: &str,
+    ) -> Result<Vec<u8>, JsValue> {
+        let id = id.trim();
+        let name = name.trim();
+        let card_type = card_type.trim().to_ascii_lowercase().replace(' ', "-");
+        if id.is_empty() || name.is_empty() || card_type.is_empty() {
+            return Err(js_error("Card ID, name, and type are required"));
+        }
+        if self.engine.state.cards.contains_key(id) {
+            return Err(js_error(format!("Card '{id}' already exists")));
+        }
+        let pile = self
+            .piles
+            .iter()
+            .find(|pile| pile.id == to_pile)
+            .ok_or_else(|| js_error(format!("Unknown pile '{to_pile}'")))?;
+        let zone = self
+            .zone_layouts
+            .iter()
+            .find(|zone| zone.id == pile.zone_id)
+            .ok_or_else(|| js_error(format!("Pile '{to_pile}' has no zone layout")))?;
+        if zone
+            .max_cards
+            .is_some_and(|max| self.engine.state.zone_cards(to_pile).len() >= max)
+        {
+            return Err(js_error(format!("{} is full", zone.name)));
+        }
+        if !zone.allowed_card_types.is_empty()
+            && !zone
+                .allowed_card_types
+                .iter()
+                .any(|allowed| allowed == &card_type)
+        {
+            return Err(js_error(format!(
+                "{} does not accept {} cards",
+                zone.name, card_type
+            )));
+        }
+
+        let counters = TokenPool::configured(
+            "counters",
+            "Counters",
+            "fa-solid fa-plus",
+            None,
+            0,
+            Some(0),
+            None,
+            true,
+        )
+        .map_err(js_error)?;
+        let tapped = TokenPool::configured(
+            "tapped",
+            "Tapped",
+            "fa-solid fa-rotate",
+            None,
+            0,
+            Some(0),
+            Some(0),
+            false,
+        )
+        .map_err(js_error)?;
+        let card = Card {
+            id: id.to_string(),
+            game_id: String::new(),
+            name: name.to_string(),
+            card_type_id: card_type,
+            description: None,
+            cost: None,
+            visual: CardVisual::Generated {
+                image: None,
+                background_image: None,
+                background_color: None,
+                icon: None,
+            },
+            back_logo: None,
+            back_image: None,
+            mana: None,
+            colors: None,
+            oracle_text: (!text.trim().is_empty()).then(|| text.trim().to_string()),
+            power: (!offense.trim().is_empty()).then(|| offense.trim().to_string()),
+            toughness: (!defense.trim().is_empty()).then(|| defense.trim().to_string()),
+            is_commander: false,
+            is_partner: false,
+            token_pools: vec![counters.clone(), tapped.clone()],
+            starting_pile: Some(to_pile.to_string()),
+        };
+        self.engine.state.cards.insert(id.to_string(), card);
+        self.engine.state.card_token_pools.insert(
+            id.to_string(),
+            [(counters.id.clone(), counters), (tapped.id.clone(), tapped)]
+                .into_iter()
+                .collect(),
+        );
+        self.engine
+            .state
+            .zones
+            .get_mut(to_pile)
+            .expect("validated pile must exist")
+            .push(id.to_string());
+        self.state_proto()
+    }
+
+    fn validate_card_destination(&self, card_id: &str, to_pile: &str) -> Result<(), EngineError> {
+        let pile = self
+            .piles
+            .iter()
+            .find(|pile| pile.id == to_pile)
+            .ok_or_else(|| EngineError::Validation(format!("Unknown pile '{to_pile}'")))?;
+        let zone = self
+            .zone_layouts
+            .iter()
+            .find(|zone| zone.id == pile.zone_id)
+            .ok_or_else(|| {
+                EngineError::Validation(format!(
+                    "Pile '{to_pile}' references unknown zone '{}'",
+                    pile.zone_id
+                ))
+            })?;
+        if let Some(max) = zone.max_cards {
+            if self.engine.state.zone_cards(to_pile).len() >= max {
+                return Err(EngineError::Validation(format!(
+                    "{} cannot contain more than {max} cards",
+                    zone.name
+                )));
+            }
+        }
+        if zone.allowed_card_types.is_empty() {
+            return Ok(());
+        }
+        let card = self.engine.state.card_by_id(card_id)?;
+        let card_type = card
+            .card_type_id
+            .trim()
+            .to_ascii_lowercase()
+            .replace(' ', "-");
+        if zone
+            .allowed_card_types
+            .iter()
+            .any(|allowed| allowed == &card_type)
+        {
+            Ok(())
+        } else {
+            Err(EngineError::Validation(format!(
+                "{} cards cannot be moved to {} (accepts: {})",
+                card.card_type_id,
+                zone.name,
+                zone.allowed_card_types.join(", ")
+            )))
+        }
+    }
+
+    fn pile_for_role(&self, role: &str) -> Result<&str, EngineError> {
+        self.piles
+            .iter()
+            .find(|pile| pile.role.as_deref() == Some(role))
+            .map(|pile| pile.id.as_str())
+            .ok_or_else(|| {
+                EngineError::Validation(format!("piles CSV must define a pile with role '{role}'"))
+            })
+    }
+
+    fn destination_for_card(&self, card_id: &str) -> Result<&str, EngineError> {
+        let card = self.engine.state.card_by_id(card_id)?;
+        let card_type = card
+            .card_type_id
+            .trim()
+            .to_ascii_lowercase()
+            .replace(' ', "-");
+        self.piles
+            .iter()
+            .find(|pile| {
+                self.zone_layouts
+                    .iter()
+                    .find(|zone| zone.id == pile.zone_id)
+                    .is_some_and(|zone| {
+                        zone.allowed_card_types
+                            .iter()
+                            .any(|kind| kind == &card_type)
+                    })
+            })
+            .map(|pile| pile.id.as_str())
+            .or_else(|| self.pile_for_role("play_default").ok())
+            .ok_or_else(|| {
+                EngineError::Validation(format!(
+                    "No zone accepts card type '{}' and no play_default pile is configured",
+                    card.card_type_id
+                ))
+            })
     }
 
     pub fn take_top(&mut self, from_pile: &str, to_pile: &str) -> Result<Vec<u8>, JsValue> {
@@ -334,9 +638,7 @@ impl WasmGame {
         if count == 0 {
             return Err(js_error("Card count must be at least one"));
         }
-        let from = pile_id_to_zone(from_pile)
-            .ok_or_else(|| js_error(format!("Unknown pile '{from_pile}'")))?;
-        let cards = self.engine.state.zone_cards(from);
+        let cards = self.engine.state.zone_cards(from_pile);
         if cards.is_empty() {
             return Err(js_error(format!("Pile '{from_pile}' is empty")));
         }
@@ -354,6 +656,33 @@ impl WasmGame {
             cards.iter().rev().take(move_count).cloned().collect()
         };
 
+        let target_pile = self
+            .piles
+            .iter()
+            .find(|pile| pile.id == to_pile)
+            .ok_or_else(|| js_error(format!("Unknown pile '{to_pile}'")))?;
+        let target_zone = self
+            .zone_layouts
+            .iter()
+            .find(|zone| zone.id == target_pile.zone_id)
+            .ok_or_else(|| js_error(format!("Unknown zone '{}'", target_pile.zone_id)))?;
+        if target_zone
+            .max_cards
+            .is_some_and(|max| self.engine.state.zone_cards(to_pile).len() + card_ids.len() > max)
+        {
+            return Err(js_error(format!(
+                "{} does not have room for {} more cards",
+                target_zone.name,
+                card_ids.len()
+            )));
+        }
+
+        // Validate the entire batch before moving anything so a mixed group cannot
+        // leave the source pile partially moved when a restricted zone rejects it.
+        for card_id in &card_ids {
+            self.validate_card_destination(card_id, to_pile)
+                .map_err(js_error)?;
+        }
         for card_id in card_ids {
             self.engine
                 .move_card_between_piles(from_pile, to_pile, &card_id)
@@ -363,9 +692,7 @@ impl WasmGame {
     }
 
     pub fn shuffle_pile(&mut self, pile_id: &str) -> Result<Vec<u8>, JsValue> {
-        let zone = pile_id_to_zone(pile_id)
-            .ok_or_else(|| js_error(format!("Unknown pile '{pile_id}'")))?;
-        self.engine.state.shuffle_zone(zone).map_err(js_error)?;
+        self.engine.state.shuffle_zone(pile_id).map_err(js_error)?;
         self.state_proto()
     }
 
@@ -383,6 +710,17 @@ impl WasmGame {
     pub fn set_card_tapped(&mut self, card_id: &str, tapped: bool) -> Result<Vec<u8>, JsValue> {
         self.engine
             .activate_card_token_pool(card_id, "tapped", tapped)
+            .map_err(js_error)?;
+        self.state_proto()
+    }
+
+    pub fn set_card_flipped(&mut self, card_id: &str, flipped: bool) -> Result<Vec<u8>, JsValue> {
+        let card = self.engine.state.card_by_id(card_id).map_err(js_error)?;
+        if card.back_image.is_none() {
+            return Err(js_error("This card does not define a back_image"));
+        }
+        self.engine
+            .activate_card_token_pool(card_id, "flipped", flipped)
             .map_err(js_error)?;
         self.state_proto()
     }
@@ -443,14 +781,30 @@ impl WasmGame {
 impl WasmGame {
     fn snapshot_proto(&self) -> Result<Vec<u8>, EngineError> {
         let mut zones = Vec::new();
-        for zone in Zone::ALL {
+        for pile in &self.piles {
             let mut cards = Vec::new();
-            for card_id in self.engine.state.zone_cards(*zone) {
+            for card_id in self.engine.state.zone_cards(&pile.id) {
                 let card = self.engine.state.card_by_id(card_id)?;
                 cards.push(CardViewProto {
                     id: card.id.clone(),
                     name: card.name.clone(),
                     card_type: card.card_type_id.clone(),
+                    mana: card.mana.clone(),
+                    oracle_text: card.oracle_text.clone(),
+                    image: match &card.visual {
+                        CardVisual::Generated { image, .. } => image.clone(),
+                        CardVisual::FullImage { image } => Some(image.clone()),
+                    },
+                    background_image: match &card.visual {
+                        CardVisual::Generated {
+                            background_image, ..
+                        } => background_image.clone(),
+                        CardVisual::FullImage { .. } => None,
+                    },
+                    colors: card.colors.clone(),
+                    power: card.power.clone(),
+                    toughness: card.toughness.clone(),
+                    back_image: card.back_image.clone(),
                     token_pools: self
                         .engine
                         .state
@@ -462,12 +816,17 @@ impl WasmGame {
                 });
             }
             let mut token_pools = Vec::new();
-            for pool in self.engine.state.get_zone_token_pools(*zone)?.values() {
+            for pool in self.engine.state.get_zone_token_pools(&pile.id)?.values() {
                 token_pools.push(token_pool_view(pool));
             }
+            let layout = self
+                .zone_layouts
+                .iter()
+                .find(|zone| zone.id == pile.zone_id);
             zones.push(ZoneViewProto {
-                id: zone.to_string(),
-                battlefield: zone.is_battlefield(),
+                id: pile.id.clone(),
+                battlefield: pile.role.as_deref() == Some("play_default")
+                    || layout.is_some_and(|zone| zone.parent_zone.is_some()),
                 cards,
                 token_pools,
             });
@@ -535,6 +894,22 @@ struct CardViewProto {
     card_type: String,
     #[prost(message, repeated, tag = "4")]
     token_pools: Vec<TokenPoolViewProto>,
+    #[prost(string, optional, tag = "5")]
+    mana: Option<String>,
+    #[prost(string, optional, tag = "6")]
+    oracle_text: Option<String>,
+    #[prost(string, optional, tag = "7")]
+    image: Option<String>,
+    #[prost(string, optional, tag = "8")]
+    background_image: Option<String>,
+    #[prost(string, optional, tag = "9")]
+    colors: Option<String>,
+    #[prost(string, optional, tag = "10")]
+    power: Option<String>,
+    #[prost(string, optional, tag = "11")]
+    toughness: Option<String>,
+    #[prost(string, optional, tag = "12")]
+    back_image: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -587,6 +962,10 @@ struct ZoneLayoutProto {
     scope: String,
     #[prost(string, optional, tag = "9")]
     parent_zone: Option<String>,
+    #[prost(string, repeated, tag = "10")]
+    allowed_card_types: Vec<String>,
+    #[prost(uint32, optional, tag = "11")]
+    max_cards: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -605,6 +984,8 @@ struct PileViewProto {
     associated_piles: Vec<String>,
     #[prost(bool, tag = "7")]
     visible: bool,
+    #[prost(string, optional, tag = "8")]
+    role: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -613,6 +994,37 @@ struct BoardLayoutProto {
     zones: Vec<ZoneLayoutProto>,
     #[prost(message, repeated, tag = "2")]
     piles: Vec<PileViewProto>,
+}
+
+fn restore_token_pool_views(
+    target: &mut std::collections::HashMap<String, TokenPool>,
+    views: Vec<TokenPoolViewProto>,
+    owner: &str,
+) -> Result<(), EngineError> {
+    if views.len() != target.len() {
+        return Err(EngineError::Validation(format!(
+            "Saved {owner} token pools do not match the current configuration"
+        )));
+    }
+    let mut restored = std::collections::HashSet::new();
+    for view in views {
+        if !restored.insert(view.id.clone()) {
+            return Err(EngineError::Validation(format!(
+                "Saved {owner} contains duplicate token pool '{}'",
+                view.id
+            )));
+        }
+        let pool = target.get_mut(&view.id).ok_or_else(|| {
+            EngineError::Validation(format!(
+                "Saved {owner} contains unknown token pool '{}'",
+                view.id
+            ))
+        })?;
+        pool.count = view.count;
+        pool.active = view.active;
+        pool.validate().map_err(EngineError::Validation)?;
+    }
+    Ok(())
 }
 
 fn token_pool_view(pool: &TokenPool) -> TokenPoolViewProto {
@@ -636,7 +1048,9 @@ fn token_pool_view(pool: &TokenPool) -> TokenPoolViewProto {
 // ── Embedded CSV helpers ──────────────────────────────────────────────────────
 
 fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError> {
-    let mut reader = csv::Reader::from_reader(Cursor::new(raw_csv.as_bytes()));
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(Cursor::new(raw_csv.as_bytes()));
     let headers = reader
         .headers()
         .map_err(EngineError::Csv)?
@@ -676,12 +1090,13 @@ fn load_cards_from_embedded_csv(raw_csv: &str) -> Result<Vec<Card>, EngineError>
             description: None,
             cost: None,
             visual: CardVisual::Generated {
-                image: None,
-                background_image: None,
-                background_color: None,
+                image: optional_value(&record, headers.get("image").copied()),
+                background_image: optional_value(&record, headers.get("background_image").copied()),
+                background_color: optional_value(&record, headers.get("background_color").copied()),
                 icon: None,
             },
             back_logo: None,
+            back_image: optional_value(&record, headers.get("back_image").copied()),
             mana: optional_value(&record, headers.get("mana").copied()),
             colors: optional_value(&record, headers.get("colors").copied()),
             oracle_text: optional_value(&record, headers.get("oracle_text").copied()),

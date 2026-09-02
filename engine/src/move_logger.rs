@@ -1,6 +1,5 @@
 use crate::card::Card;
 use crate::engine::EngineError;
-use crate::zones::Zone;
 #[cfg(not(target_arch = "wasm32"))]
 use chrono::Utc;
 use std::env;
@@ -57,8 +56,8 @@ impl MoveLogger {
         &self,
         action: &str,
         card: &Card,
-        from_zone: Zone,
-        to_zone: Zone,
+        from_zone: &str,
+        to_zone: &str,
         notes: Option<&str>,
     ) -> Result<MoveLogEntry, EngineError> {
         #[cfg(target_arch = "wasm32")]

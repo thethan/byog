@@ -105,6 +105,10 @@ Add the same optional `token_pools` column to `data/zones.csv` to configure a zo
 
 Zones may also include a `scope` column. Use `player` for a separate copy owned by each player (such as a hand or deck), or `game` for a zone shared by everyone (such as a stack). The default is `player` when the column or value is omitted. Any other value is rejected during loading.
 
+Zones may include an `allowed_card_types` column containing comma-separated card type ids. An empty value accepts every type. Moves into a restricted zone are rejected unless the card type matches; for example, `land` on the Lands zone and `artifact` on the Artifacts zone.
+
+Zones and piles are runtime data rather than engine enums. `piles.csv` supplies each pile id and may assign a semantic `role` (`draw`, `hand`, `commander`, `discard`, `exile`, or `play_default`) for generic actions. `zones.csv` supplies `allowed_card_types` and an optional `max_cards`; neither zone names nor card-type routing are compiled into the engine.
+
 Every new game also creates `player-1` with an active `life` token pool starting at 20. Player pools can be changed through `add_tokens_to_player_pool` and `remove_tokens_from_player_pool`.
 
 - Zone pools are managed on `GameState` / `CardEngine` with `set_zone_token_pools`, `add_zone_token_pool`, `activate_zone_token_pool`, `add_tokens_to_zone_pool`, and `remove_tokens_from_zone_pool`.

@@ -16,4 +16,4 @@ pub use engine::{CardEngine, EngineError};
 pub use move_logger::{MoveLogEntry, MoveLogger, moves_log_path};
 pub use player::{DEFAULT_PLAYER_ID, DEFAULT_STARTING_LIFE, Player};
 pub use token_pools::{Token, TokenPool, TokenPoolDefinition, TokenPoolOwner, TokenType};
-pub use zones::{GameState, Zone};
+pub use zones::{GameState, ZoneId};

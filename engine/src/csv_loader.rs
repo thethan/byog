@@ -6,7 +6,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use token_pools::TokenPool;
 
-const DEFAULT_CARDS_CSV_PATH: &str = "data/cards.csv";
+const DEFAULT_CARDS_CSV_PATH: &str = "data/players/player-1/cards.csv";
 
 pub fn cards_csv_path() -> PathBuf {
     env::var("CARDS_CSV_PATH")
@@ -17,7 +17,10 @@ pub fn cards_csv_path() -> PathBuf {
 pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
     let path = path.map(PathBuf::from).unwrap_or_else(cards_csv_path);
 
-    let mut reader = csv::Reader::from_path(&path).map_err(EngineError::Csv)?;
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_path(&path)
+        .map_err(EngineError::Csv)?;
     let headers = reader
         .headers()
         .map_err(EngineError::Csv)?
@@ -57,12 +60,13 @@ pub fn load_cards(path: Option<&Path>) -> Result<Vec<Card>, EngineError> {
             card_type_id: card_type_id(&card_type_raw),
             description: None,
             visual: CardVisual::Generated {
-                image: None,
-                background_image: None,
-                background_color: None,
+                image: optional_value(&record, headers.get("image").copied()),
+                background_image: optional_value(&record, headers.get("background_image").copied()),
+                background_color: optional_value(&record, headers.get("background_color").copied()),
                 icon: None,
             },
             back_logo: None,
+            back_image: optional_value(&record, headers.get("back_image").copied()),
             cost: None, // todo add this back in.
             mana: optional_value(
                 &record,
