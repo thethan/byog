@@ -58,6 +58,10 @@ pub struct ZoneLayout {
     pub height: u8,
     /// Token pools owned by this zone, parsed from the optional CSV column.
     pub token_pools: Vec<TokenPool>,
+    /// Card type ids accepted by this zone. Empty means any card type.
+    pub allowed_card_types: Vec<String>,
+    /// Optional capacity for every pile in this zone.
+    pub max_cards: Option<usize>,
 }
 
 pub fn load_zones(path: Option<&Path>) -> Result<Vec<ZoneLayout>, EngineError> {
@@ -86,6 +90,8 @@ pub fn parse_zones_csv(raw: &str) -> Result<Vec<ZoneLayout>, EngineError> {
     let parent_zone_idx = headers.get("parent_zone").copied();
     let width_idx = headers.get("width").copied();
     let height_idx = headers.get("height").copied();
+    let allowed_card_types_idx = headers.get("allowed_card_types").copied();
+    let max_cards_idx = headers.get("max_cards").copied();
 
     let mut zones = Vec::new();
     for (line_idx, record) in reader.records().enumerate() {
@@ -128,6 +134,26 @@ pub fn parse_zones_csv(raw: &str) -> Result<Vec<ZoneLayout>, EngineError> {
                 ))
             })?
             .unwrap_or_default();
+        let allowed_card_types = allowed_card_types_idx
+            .and_then(|idx| record.get(idx))
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase().replace(' ', "-"))
+            .collect();
+        let max_cards = max_cards_idx
+            .and_then(|idx| record.get(idx))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                value.parse::<usize>().map_err(|_| {
+                    EngineError::Validation(format!(
+                        "Invalid max_cards '{value}' at zones CSV line {line}"
+                    ))
+                })
+            })
+            .transpose()?;
 
         zones.push(ZoneLayout {
             id,
@@ -140,6 +166,8 @@ pub fn parse_zones_csv(raw: &str) -> Result<Vec<ZoneLayout>, EngineError> {
             width,
             height,
             token_pools,
+            allowed_card_types,
+            max_cards,
         });
     }
     let ids: std::collections::HashSet<_> = zones.iter().map(|zone| zone.id.as_str()).collect();
@@ -246,6 +274,14 @@ mod tests {
         assert_eq!(zones[1].height, 16);
         assert_eq!(zones[1].token_pools[0].id, "energy");
         assert_eq!(zones[1].token_pools[0].token(), "fa-solid fa-bolt");
+    }
+
+    #[test]
+    fn parses_allowed_card_types() {
+        let csv = "id,name,color,grid,allowed_card_types,max_cards\nlands,Lands,lime,\"0,0.8x4\",\"land,basic land\",12\n";
+        let zones = parse_zones_csv(csv).expect("parse zone card types");
+        assert_eq!(zones[0].allowed_card_types, vec!["land", "basic-land"]);
+        assert_eq!(zones[0].max_cards, Some(12));
     }
 
     #[test]

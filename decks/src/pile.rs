@@ -22,6 +22,8 @@ pub struct Pile {
     pub associated_piles: Vec<String>,
     /// Whether card identities are shown on the board without an explicit search.
     pub visible: bool,
+    /// Optional semantic role used by generic game actions (for example `hand` or `draw`).
+    pub role: Option<String>,
 }
 
 pub fn load_piles(path: Option<&Path>) -> Result<Vec<Pile>, EngineError> {
@@ -77,6 +79,12 @@ pub fn parse_piles_csv(raw: &str) -> Result<Vec<Pile>, EngineError> {
             line,
             true,
         )?;
+        let role = headers
+            .get("role")
+            .and_then(|idx| record.get(*idx))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
 
         piles.push(Pile {
             id,
@@ -87,6 +95,7 @@ pub fn parse_piles_csv(raw: &str) -> Result<Vec<Pile>, EngineError> {
             y,
             associated_piles,
             visible,
+            role,
         });
     }
     Ok(piles)
@@ -166,14 +175,15 @@ mod tests {
 
     #[test]
     fn parses_piles_csv() {
-        let csv = "id,name,zone_id,x,y,associated_piles\n\
-                   deck,Deck,deck_zone,0,4,\"main_stack,discard\"\n\
-                   hand,Hand,hand,0,28,\n";
+        let csv = "id,name,zone_id,x,y,associated_piles,role\n\
+                   deck,Deck,deck_zone,0,4,\"main_stack,discard\",draw\n\
+                   hand,Hand,hand,0,28,,\n";
         let piles = parse_piles_csv(csv).expect("parse piles");
         assert_eq!(piles.len(), 2);
         assert_eq!(piles[0].id, "deck");
         assert_eq!(piles[0].name, "Deck");
         assert!(piles[0].visible);
+        assert_eq!(piles[0].role.as_deref(), Some("draw"));
         assert_eq!(piles[1].id, "hand");
         assert_eq!(piles[1].name, "Hand");
     }
